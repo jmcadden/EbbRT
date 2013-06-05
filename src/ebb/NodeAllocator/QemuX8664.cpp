@@ -23,15 +23,14 @@ ebbrt::QemuX8664::Allocate(std::string path){
   /* execvp structure */
   char *args[] = {
     const_cast<char*>(cmd_.c_str()), // command
-    const_cast<char*>("-netdev"),
-    const_cast<char*>("tap,id=vlan0,vhost=on,ifname=tap0,script=no,downscript=no"),
-    const_cast<char*>("-device"),
-    const_cast<char*>("virtio-net-pci,netdev=vlan0"),
     const_cast<char*>("-net"),
-    const_cast<char*>("nic,macaddr=52:54:be:36:42:a9"),
+    const_cast<char*>("nic,model=virtio"),
+    //const_cast<char*>("nic,macaddr=52:54:be:36:42:a9"),
+    const_cast<char*>("-net"),
+    const_cast<char*>("vde,sock=/tmp/vde_switch0"),
     const_cast<char*>("-nographic"),
     const_cast<char*>(path.c_str()), // boot image
-    (char *)0 }; // null terminator
+    (char *)0 }; 
 
   /* fork & spawn */
   pid_t pid = fork();
