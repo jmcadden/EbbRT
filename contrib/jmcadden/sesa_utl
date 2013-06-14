@@ -1,0 +1,21 @@
+#!/bin/bash
+set -x
+
+PATH=$PATH:/sbin
+
+declare -r SESABASEUTIL=${SESA_BASEUTIL:-/home/jappavoo/src/scripts/khctl}
+declare -r SESACONTEXT=${SESA_CONTEXT:-localhost}
+
+typeset dofunc
+
+function allocateNodes
+{
+  local appid="$1"
+  local count="$2"
+
+  if [[ -z $appid  || -z $count]]
+  then
+    echo "USAGE: allocateNodes <app_id> <node_count>" >&2
+    return 255
+  fi
+}j
