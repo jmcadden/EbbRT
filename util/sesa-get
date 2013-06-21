@@ -1,0 +1,57 @@
+#!/bin/bash
+#set -x
+# Set the path do your sesa-scripts and node database directories
+declare -r SESA_UTIL=${SESA_UTIL:-~/sesa/scripts/khctl}
+declare -r KHCTL_BASEDIR=${SESA_BASEDIR:-~/sesa/khdb}
+declare -r SESA_EMUCMD=${SESA_EMUCMD:-qemu-system-x86_64 }
+declare -r SESA_MNTDIR=${SESA_MNTDIR:-~/sesa/mnt }
+declare -r SESA=1
+
+declare app
+declare bootimg
+declare fntimg
+declare inet
+declare xnet
+declare bios
+declare mnt
+declare -i count=1
+declare -i optcount=0
+
+while getopts "m:b:ixf" OPT
+do 
+  case $OPT in
+      ("m") mnt="$OPTARG"; (( optcount=optcount + 2));;
+      ("b") bios="$OPTARG"; (( optcount=optcount + 2));;
+      ("i") inet="-i"; (( optcount=optcount + 1));;
+      ("x") xnet="-x"; (( optcount=optcount + 1));;
+      ("f") inet='-i'; xnet='-x'; (( optcount=optcount + 1));;
+  esac
+done
+
+shift $optcount
+app=$1
+bootimg=$2
+[[ -n $3 ]] && count=$3
+
+if [[ -z $app  || ! (-a $bootimg)]]
+then
+  echo "USAGE: EbbRT  [-f] [-i] [-x] [-b bios] <appName> <boot_img> [count] \ " 
+  echo "     appname  : application to get the nodes for" 
+  echo "     bootimg  : path to back-end boot image" 
+  echo "     -m mnt   : mount directory as FAT fs"
+  echo "     -b bios  : path to bios rom"
+  echo "     -i       : add nodes to the Internal public network" 
+  echo "     -x       : add nodes to the External network" 
+  echo "     -n count : number of backend nodes, default is 1" 
+  echo "     -f       : enable front end, equivalent to -x -i" 
+  exit 1;
+fi
+
+export KHCTL_BASEDIR
+export SESA_EMUCMD
+export SESA_MNTDIR
+export SESA_IMG=$bootimg
+export SESA
+
+$SESA_UTIL acquireNodes $inet $xnet $app $count
+

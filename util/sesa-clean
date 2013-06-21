@@ -1,0 +1,12 @@
+#!/bin/bash
+#set -x
+# Set the path do your sesa-scripts and node database directories
+declare -r SESA_UTIL=${SESA_UTIL:-~/sesa/scripts/khctl}
+declare -r KHCTL_BASEDIR=${SESA_BASEDIR:-~/sesa/khdb}
+declare -r SESA=1
+export KHCTL_BASEDIR
+export SESA_EMUCMD
+export SESA
+
+$SESA_UTIL SESAcleanAll
+
