@@ -176,6 +176,6 @@ fi
 
 if [[ $localrun == 1 ]]; then
   for i in `seq 1 $count`; do
-    xterm -hold -e $FNT_IMG $CONFIG $APPNAME $BARE_32 &
+    xterm -hold -e $FNT_IMG $CONFIG $BARE_32 &
   done
 fi

@@ -18,4 +18,4 @@ if [[ $(type -p khctl ) ]]; then
    declare SESA_UTIL=khctl
 fi
 
-$SESA_UTIL SESAcleanApp $1
+$SESA_UTIL SESACleanApp $1

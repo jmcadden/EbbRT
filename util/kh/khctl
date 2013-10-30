@@ -12,8 +12,8 @@
 #####################################
 if [[ $BASH_VERSION != 3.1.* ]]; then shopt -s compat31; fi
 
+# General Settings
 shopt -s extglob
-
 PATH=$PATH:/sbin
 declare -r KHBASEDIR=${KHCTL_BASEDIR:-/home/kh}
 declare -r KHCONSDIR=${KHCTL_CONSDIR:-$KHBASEDIR/Consoles}
@@ -31,33 +31,32 @@ declare -r KHPNETSRESERVED=${KHCTL_PNETSRESERVED:-3}
 declare -r KHPNETIDSTART=${KHCTL_PNETIDSTART:-$KHPNETSRESERVED}
 declare -r KHPNETIDEND=${KHCTL_PNETIDEND:-$(printf "%d" 0xffffffff)}
 declare -r KHUSERPREFIX=${KHCTL_USERPREFIX:-con}
+declare -r SESANETDIR=${SESA_NETDIR:-$KHBASEDIR/Networks}
+declare -r SESAEMUCMD=${SESA_EMUCMD:-"/opt/bin/qemu-system-x86_64"}
 declare -r KHCTRLID=${KHCTL_CTRLID:-0}
 declare -r FREEOWNER='_FREE_'
 declare -r FREEPNET=$KHFREENETID
 declare -r FREEINETFLG=0
 declare -r FREEXNETFLG=0
 declare -r FREECONID=$KHCTRLID
+declare -r FREENETADDR='0.0.0.0'
 declare BUFFERVAR
 declare -i BUFFERTTY=1
-typeset dofunc
-
-## configurable functions
-#declare  configNodes=KHconfigNodes
-#declare  createCon=KHcreateCon
-#declare  createConUser=KHcreateConUser
-
-# SESA General
-declare -r SESAMAXNODES=${SESA_MAX_NODES:-256}
-declare -r SESANETDIR=${SESA_NETDIR:-$KHBASEDIR/Networks}
-declare -r SESAEMUCMD=${SESA_EMUCMD:-"/opt/bin/qemu-system-x86_64"}
 declare SESAMNTDIRA=${SESA_MNTDIR_A:=""}
 declare SESAMNTDIRB=${SESA_MNTDIR_B:=""}
 declare SESADEBUG=${SESA_DEBUG:=""}
 declare SESABIOS=${SESA_BIOS:=""}
 declare SESATAP=${SESA_TAP:=""}
-declare  configNodes=SESAconfigNodes
+typeset dofunc
+
 declare  createCon=SESAcreateCon
 declare  createConUser=SESAcreateConUser
+
+# Allocation Type Settings
+declare -r SESAMAXNODES=${SESA_MAX_NODES:-4}
+declare  configNodes=${SESA_Config_Nodes:=HPCloudConfigNodes}
+declare  allocNodes=${SESA_Alloc_Nodes:=HPCloudAllocNodes}
+declare  freeNodes=${SESA_Free_Nodes:=HPCloudFreeApp}
 
 function getNatIP
 {
@@ -122,7 +121,7 @@ function interfaceAddr
   return 255
 }
 
-#
+
 #ttyRawWrite()
 #{
 #  local data="$1"
@@ -209,7 +208,8 @@ function SESAcleanAll
   rm -rf $SESANETDIR/*
 }
 
-function SESAcleanApp
+
+function SESAFreeApp
 {
   app=$1
   if [[ -z $app ]]; then
@@ -217,7 +217,38 @@ function SESAcleanApp
       exit 1
   fi
 
-  local nodes=()
+  local consoles=( $(tupleCmd echo Node "*:$app:*:*:*") )
+  if [[ $consoles == "*:$app:*:*:*" ]];then
+    exit 1
+  fi
+
+  # kill the processes 
+  local files=( ${consoles[@]/*:/$KHCONSDIR/} )
+  kill $( cat ${files[@]/%//nodes/\*/pid} | sort -u ) 2> /dev/null
+
+  for i in ${consoles[@]}
+  do
+    nodes+=($( echo $i | cut -d ':' -f 1 ))
+  done
+
+  lock tuples
+  locked_rm_nodes "*" "$1" "*" "*" "*" "*"
+  for j in ${nodes[@]}
+  do
+    locked_touch_nodes "$j" "$FREEOWNER" "$FREEPNET"\
+      "$FREEINETFLG" "$FREEXNETFLG" "$FREECONID" "$FREENETADDR"
+  done
+  unlock tuples
+}
+
+function SESACleanApp
+{
+  app=$1
+  if [[ -z $app ]]; then
+      echo "Error: No app name"
+      exit 1
+  fi
+
   local consoles=( $(tupleCmd echo Node "*:$app:*:*:*") )
   if [[ $consoles == "*:$app:*:*:*" ]];then
     echo "Error: App not found. Use khls to list active apps"
@@ -231,28 +262,20 @@ function SESAcleanApp
     echo "ERROR: $app not found"
     exit 1
   fi
+  #TODO: abstract away network cleanup 
+  if [[ -a $SESANETDIR/$net/pid ]]; then
+    kill $( cat $SESANETDIR/$net/pid ) > /dev/null 2>&1
+  fi
 
-  for i in ${consoles[@]}
-  do
-    nodes+=($( echo $i | cut -d ':' -f 1 ))
-  done
+  # clean up resources
+  $freeNodes $app
 
-  # delete processes
-  kill $( cat ${files[@]/%//nodes/\*/pid} | sort -u )
-  kill $( cat $SESANETDIR/$net/pid )
-
-  # remove tuples
+  # clean up tuples
   lock tuples
   locked_rm_users "$1" "*"
   locked_rm_pnets "$net" "$1"
-  locked_rm_nodes "*" "$1" "*" "*" "*" "*"
-  for j in ${nodes[@]}
-  do
-    locked_touch_nodes "$j" "$FREEOWNER" "$FREEPNET"\
-      "$FREEINETFLG" "$FREEXNETFLG" "$FREECONID"
-  done
   unlock tuples
-
+  
   # clean up files
   rm -rf $SESANETDIR/$net
   rm -rf $( echo ${files[@]} | sort -u )
@@ -287,7 +310,6 @@ function SESAdisplayApp
   do
     echo $i
   done
-
 }
 
 function SESAlistApp
@@ -313,7 +335,7 @@ function SESAgenerateMac()
   echo $mac
 }
 
-SESAconfigNodes()
+SESAConfigNodes()
 {
   local khuser=$1
   local pnetids=$2
@@ -529,9 +551,9 @@ assignNodes()
       configdesc=$($configNodes $khuser $pnetid $inet $xnet $conid $num "${nodes[*]}")
       if (( $? == 0 ))
       then
-        if [[ 1 ]]; then # FIXME: cleanup
-          echo "Platform: qemu-system-x86_64"
-       # else
+       # if [[ 1 ]]; then # FIXME: cleanup
+       #   echo "Platform: qemu-system-x86_64"
+       # else 
        #   if [[ -n $SSH_CONNECTION ]]
        #   then
        #     conip=${SSH_CONNECTION% *}
@@ -554,7 +576,7 @@ assignNodes()
        #     done
        #   fi
        #   echo "protocol: uboot"
-        fi
+       # fi
         echo "$configdesc"
         echo "nodes: ${nodes[*]}"
         return 0
@@ -564,18 +586,306 @@ assignNodes()
   return 255
 }
 
-function getTotalNodes
-{
-  local rc
 
-  if [[ -a $KHTOTALSIZEFILE ]]
-  then
-     rc=$(cat $KHTOTALSIZEFILE)
-  else
-     rc=$SESAMAXNODES
+SESAAllocNodes()
+{
+  # no preallocation needed for baremetal qemu
+  return 0
+}
+
+#SNLXAllocNodes()
+#{
+#  return 255
+#  local khuser=$1
+#  local pnetids=$2
+#  local inet=$3
+#  local xnet=$4
+#  local conid=$5
+#  local num=$6
+#  local nodes="$7"
+#
+#  base=.
+#  ulnx=./ulnx
+#   bare=./bare
+#  imgtype=iso
+#  export SESA_GET=khget
+#  ##### SESA LINUX IMAGE ##################################
+#  sesalnx=/opt/bin/sesalnx.img
+#  sesalnx_id=/opt/bin/sesalnx_id
+#  config_dir=/mnt/app
+#  share_dir=/mnt/share
+#  #########################################################
+#  declare app
+#  declare count
+#  declare name
+#  declare tap
+#  declare debug
+#  declare -i optcount=0
+#
+#  while getopts "n:t:g:DBK" OPT
+#  do 
+#    case $OPT in
+#      ("n") name="$OPTARG"; (( optcount=optcount + 2));;
+#      ("t") tap="$OPTARG"; (( optcount=optcount + 2));;
+#    ("g") debug="$OPTARG"; (( optcount=optcount + 2));;
+#    esac
+#  done
+#
+#  shift $optcount
+#  name=$1
+#  count=$2
+#
+#  if [[ -z $name  || -z $count ]]
+#  then
+#    echo "USAGE: $0 [-t tap] <name> <count>"
+#    echo "     -t  tap  : tap interface" 
+#    echo "     -g  port : gdb server port" 
+#    echo "     app      : application to associate nodes with"
+#    echo "     count    : num of instances"
+#    exit 1;
+#  fi
+#
+#  if [[ -z $count ]]; then count=1; fi
+#  echo "Loading $count node instances in $name"
+#
+#  if [[ -n $tap ]]; then 
+#    export SESA_TAP=$tap
+#  fi
+#
+#  if [[ -n $debug ]]; then 
+#    export SESA_DEBUG=$debug
+#  fi
+#  APPNAME="$name"
+#
+#  # Create directory for instance config 
+#  instdir=$base/appdata/$APPNAME
+#  mkdir -p $instdir
+#
+#  # construct launch script
+#  touch $instdir/prelaunch; chmod 755 $instdir/prelaunch
+#  cat > $instdir/prelaunch << EOF
+#  #!/bin/bash
+#app=$config_dir/app.elf32
+#mod=$config_dir/config.dtb
+#EOF
+#
+#  # write ip 
+#  let max=10+$count**2 # ip timeout
+#  echo "MAX=$max" >> $instdir/prelaunch 
+#  cat $base/scripts/ip >> $instdir/prelaunch
+#
+#  # kexec
+#  touch $instdir/run; chmod 755 $instdir/run
+#  cat > $instdir/run << EOF
+##!/bin/bash
+#app=/root/app.elf32
+#mod=/root/config.dtb
+#EOF
+#  cat $base/scripts/kexec >> $instdir/run
+#
+#  # load isntances
+#  for i in `seq 1 $count`; do
+#    instid=$RANDOM
+#
+#    # Create director for copy-on-write images (if nessessary)
+#    cowdir=$base/cowimgs/$APPNAME
+#    mkdir -p $cowdir
+#
+#    qemu-img create -f qcow2 -b $sesalnx $cowdir/$instid.img >> /dev/null
+#    FNT_IMG=$(readlink -f ${cowdir}/$instid.img)
+#
+#    # mount and run
+#    mnt=$(readlink -f ${base}/$instdir)
+#    $SESA_GET -i -c $mnt $APPNAME $FNT_IMG 1
+#  done
+#  return 0
+#}
+
+
+HPCloudConfigNodes()
+{
+  local khuser=$1
+  local pnetids=$2
+  local inet=$3
+  local xnet=$4
+  local conid=$5
+  local num=$6
+  local nodes="$7"
+  local basedir=$KHCONSDIR/$conid
+
+  # node construction 
+  for n in ${nodes[@]}; do
+    dir=$basedir/nodes/$n
+
+    local ipstr=( $(tupleCmd echo Net "$n:*") )
+    local ip=$( echo $ipstr | cut -d ':' -f 2 )
+    echo $ip
+
+    if [[ $ip == $FREENETADDR || ! $ip ]]; then
+      echo "Error: attempting to connect to an unitilized node"
+      exit 1
+    fi
+
+    ##### HPCLOUD VARIABLES ##################################
+    user=ubuntu
+    sesalnx_id=/opt/bin/hpcloud_jmcadden.pem
+    app=/home/ubuntu/app.elf32
+    config=/home/ubuntu/config.dtb
+    sshops="-q -i $sesalnx_id -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no "
+    #########################################################
+
+    ## Load and run app on pre-allocated instance
+    scp $sshops $SESA_CONFIG  $user@$ip:$config
+    scp $sshops $SESA_IMG  $user@$ip:$app
+    ssh $sshops $user@$ip sudo kexec -t multiboot-x86 \
+        --module=$config -l $app
+    xterm -e ssh $sshops $user@$ip sudo kexec -e 2> /dev/null
+
+  done
+  return 0
+}
+
+HPCloudAllocNodes()
+{
+  local nodes="$1"
+  local num=${#nodes[@]}
+  local active=$(($(hpcloud servers | grep ACTIVE | wc -l)+$num))
+
+
+  echo "Allocating $num nodes "
+  for i in ${nodes[@]}
+  do
+    hpcloud servers:add "kh_"$i xsmall --key_name ssh
+  done
+
+
+  echo -n "Waiting"
+  while [[ $(hpcloud servers | grep ACTIVE | wc -l) -lt $active ]];
+  do
+    sleep 3
+    echo -n "."
+  done
+
+  for i in ${nodes[@]}
+  do
+    ip=$(hpcloud servers -d " " kh_$i | grep ACTIVE | while read nid state fla img ip junk ; do echo $ip; done)
+    echo "\nStoring IPs $i $ip"
+    locked_rm_netaddr "$i" "*" 
+    locked_touch_netaddr "$i" "$ip" 
+  done
+  
+  return 0
+}
+
+HPCloudGetIps()
+{
+
+  local nodes="$1"
+  for i in ${nodes[@]}
+  do
+    ip=$(hpcloud servers -d " " kh_$i | grep ACTIVE | while read nid state fla img ip junk ; do echo $ip; done)
+    echo "\nStoring IPs $i $ip"
+    locked_rm_netaddr "$i" "*" 
+    locked_touch_netaddr "$i" "$ip" 
+  done
+
+
+}
+ 
+HPCloudFreeApp()
+{
+  app=$1
+  if [[ -z $app ]]; then
+      echo "Error: No app name"
+      exit 1
   fi
 
-  echo $rc
+  local consoles=( $(tupleCmd echo Node "*:$app:*:*:*") )
+  if [[ $consoles == "*:$app:*:*:*" ]];then
+    exit 1
+  fi
+
+  for i in ${consoles[@]}
+  do
+    nodes+=($( echo $i | cut -d ':' -f 1 ))
+  done
+
+  HPCloudRebootNodes "${nodes[*]}"
+
+  lock tuples
+  locked_rm_nodes "*" "$1" "*" "*" "*" "*"
+  for j in ${nodes[@]}
+  do
+    locked_touch_nodes "$j" "$FREEOWNER" "$FREEPNET"\
+      "$FREEINETFLG" "$FREEXNETFLG" "$FREECONID" "$FREENETADDR"
+  done
+  unlock tuples
+}
+
+
+HPCloudFreeNodes()
+{
+  local nodes="$1"
+  local num=${#nodes[@]}
+
+  local remaining=$(($(hpcloud servers | grep ACTIVE | wc -l)-$num))
+
+  for i in ${nodes[@]}
+  do
+    echo "Freeing node $i"
+    hpcloud servers:remove "kh_"$i >/dev/null 2>&1
+
+  done
+
+  echo -n "Waiting.."
+  while [[ $(hpcloud servers | grep ACTIVE | wc -l) -gt $remaining ]];
+  do
+    echo -n "."
+    sleep 3
+  done
+
+  echo ""
+  return 0
+}
+
+HPCloudRebootNodes()
+{
+  local nodes="$1"
+
+  local remaining=$(($(hpcloud servers | grep ACTIVE | wc -l)))
+
+  for i in ${nodes[@]}
+  do
+   echo "Rebooting node $i"
+   hpcloud servers:reboot "kh_"$i >/dev/null 2>&1
+  done
+
+  echo -n "Waiting"
+  while [[ $(hpcloud servers | grep rebooting_hard | wc -l) -gt 0 ]];
+  do
+    sleep 3
+    echo -n "."
+  done
+
+  echo ""
+  return 0
+}
+
+MocConfigNodes()
+{
+  echo "MOC integration not yet functional"
+  return 0
+}
+
+MocAllocNodes()
+{
+  echo "MOC integration not yet functional"
+  return 0
+}
+
+function getTotalNodes
+{
+  echo $SESAMAXNODES
 }
 
 function getMyRank
@@ -904,6 +1214,41 @@ function locked_touch_nodes
   return $?
 }
 
+
+###  node nodeid:owner:pnetids:inet:xnet:consid  ###
+function locked_touch_netaddr
+{
+  local nodeidpat="$1"
+  local netaddr="$2"
+
+  if [[ -z $nodeidpat || -z $netaddr ]]
+  then
+     echo "usage: $funcname <nodeidpat> <netaddr>"
+     return 255
+  fi
+  
+  locked_unchecked_tupleCmd touch Net \
+      "$nodeidpat:$netaddr" 
+  return $?
+} 
+
+
+function locked_rm_netaddr
+{
+  local nodeidpat="$1"
+  local netaddr="$2"
+
+  if [[ -z $nodeidpat || -z $netaddr ]]
+  then
+     echo "usage: $funcname <nodeidpat> <netaddr>"
+     return 255
+  fi
+  
+  locked_unchecked_tupleCmd rm Net \
+      "$nodeidpat:$netaddr" 
+  return $?
+} 
+
 ###  Node nodeid:owner:pnetids:inet:xnet:consid  ###
 function locked_ls_nodes
 {
@@ -1112,7 +1457,8 @@ locked_initFreeNodes()
    maxnoderank=$(($(getTotalNodes) - 1))
    nodepat="{0..$maxnoderank}"
    locked_touch_nodes "$nodepat" "$FREEOWNER" "$FREEPNET"\
-                      "$FREEINETFLG" "$FREEXNETFLG" "$FREECONID"
+                      "$FREEINETFLG" "$FREEXNETFLG" "$FREECONID" "$FREENETADDR"
+   locked_touch_netaddr "$nodepat" "$FREENETADDR" 
 
    myrank=$(getMyRank)
    if [[ -n $myrank ]] && (( $myrank <= $maxnoderank ))
@@ -1139,12 +1485,30 @@ function locked_checkAndSetupTypes
        locked_unchecked_tupleCreateType Pnet
     fi
 
+    # Net nodeid:networkid
+    if ! locked_unchecked_tupleTypeExists Net
+    then
+       locked_unchecked_tupleCreateType Net
+    fi
+
     # Node nodeid:owner:pnetids:inet:xnet:consid
     if ! locked_unchecked_tupleTypeExists Node
     then
        locked_unchecked_tupleCreateType Node
        locked_initFreeNodes
     fi
+}
+
+function SESASetupEnvironment
+{
+
+  lock tuples
+    locked_checkAndSetupTypes    
+  unlock tuples 
+
+  maxnoderank=$(($(getTotalNodes) - 1))
+  nodepat="`seq 0 $maxnoderank`"
+  $allocNodes "$nodepat"
 }
 
 function acquireNodes
@@ -1296,10 +1660,13 @@ function acquireNodes
       unlock tuples
       return 255;
     fi
-
-  unlock tuples
-
-
+    
+  unlock tuples 
+  
+ # echo "conid:$conid"
+ # echo "pnetids:$pnetids"
+ # echo "nodes:${nodes[*]//:*/}
+ 
   assignNodes "$khuser" "$pnetids" $inet $xnet $conid $num "${nodes[*]//:*/}"
   if [[ -e /tmp/khmonpipe ]]
   then
