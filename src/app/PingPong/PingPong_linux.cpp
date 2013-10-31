@@ -50,7 +50,7 @@ const ebbrt::app::Config ebbrt::app::config = {
 /****************************/
 
 namespace {
-     unsigned const node_count = 10;
+     unsigned const node_count = 2;
 };
 
 int
@@ -83,15 +83,12 @@ main(int argc, char* argv[] )
     ebbrt::EbbRef<ebbrt::Config>(ebbrt::ebb_manager->AllocateId());
   ebbrt::ebb_manager->Bind(ebbrt::Fdt::ConstructRoot, ebbrt::config_handle);
 
-
-  ebbrt::message_manager->StartListening();
-
-
   char *ptr = ebbrt::app::LoadFile(argv[1], &n);
   ebbrt::config_handle->SetConfig(ptr);
   uint32_t spaceid = ebbrt::config_handle->GetInt32("/", "space_id");
-  ebbrt::config_handle->SetString("/", "frontend_ip", "10.255.0.1");
+  ebbrt::config_handle->SetString("/", "frontend_ip", "128.197.11.52");
 
+  ebbrt::message_manager->StartListening();
 
 #ifdef UDP
   std::string tmppath = "/scratch/"; // Ugh..
