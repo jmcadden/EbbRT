@@ -739,7 +739,7 @@ HPCloudConfigNodes()
     scp $sshops $SESA_IMG  $user@$ip:$app
     ssh $sshops $user@$ip sudo kexec -t multiboot-x86 \
         --module=$config -l $app
-    xterm -e ssh $sshops $user@$ip sudo kexec -e 2> /dev/null
+    xterm -e ssh $sshops -f $user@$ip sudo kexec -e 
 
   done
   return 0
@@ -759,21 +759,19 @@ HPCloudAllocNodes()
   done
 
 
-  echo -n "Waiting"
   while [[ $(hpcloud servers | grep ACTIVE | wc -l) -lt $active ]];
   do
     sleep 3
-    echo -n "."
   done
 
   for i in ${nodes[@]}
   do
     ip=$(hpcloud servers -d " " kh_$i | grep ACTIVE | while read nid state fla img ip junk ; do echo $ip; done)
-    echo "\nStoring IPs $i $ip"
     locked_rm_netaddr "$i" "*" 
     locked_touch_netaddr "$i" "$ip" 
   done
   
+  echo "Allocation complete. "
   return 0
 }
 
@@ -837,14 +835,12 @@ HPCloudFreeNodes()
 
   done
 
-  echo -n "Waiting.."
   while [[ $(hpcloud servers | grep ACTIVE | wc -l) -gt $remaining ]];
   do
-    echo -n "."
     sleep 3
   done
 
-  echo ""
+  echo "Free complete."
   return 0
 }
 
@@ -860,14 +856,12 @@ HPCloudRebootNodes()
    hpcloud servers:reboot "kh_"$i >/dev/null 2>&1
   done
 
-  echo -n "Waiting"
   while [[ $(hpcloud servers | grep rebooting_hard | wc -l) -gt 0 ]];
   do
     sleep 3
-    echo -n "."
   done
 
-  echo ""
+  echo "Reboot complete"
   return 0
 }
 

@@ -64,15 +64,26 @@ ebbrt::VirtioNet::ConstructRoot()
 
 ebbrt::VirtioNet::VirtioNet(EbbId id) : Ethernet{id}
 {
-  auto it = std::find_if(pci->DevicesBegin(), pci->DevicesEnd(),
-                         [] (const PCI::Device& d) {
-                           return d.VendorId() == 0x1af4 &&
-                           d.DeviceId() >= 0x1000 &&
-                           d.DeviceId() <= 0x103f &&
-                           d.GeneralHeaderType() &&
-                           d.SubsystemId() == 1;
-                         });
-
+  auto it = pci->DevicesEnd();
+  for (auto dev_it = pci->DevicesBegin(); dev_it != pci->DevicesEnd(); ++dev_it) {
+    if (dev_it->VendorId() == 0x1af4 &&
+        dev_it->DeviceId() >= 0x1000 &&
+        dev_it->DeviceId() <= 0x103f &&
+        dev_it->GeneralHeaderType() &&
+        dev_it->SubsystemId() == 1) 
+    {
+      it = dev_it;
+    }
+  }
+//  auto it = std::find_if(pci->DevicesBegin(), pci->DevicesEnd(),
+//                         [] (const PCI::Device& d) {
+//                           return d.VendorId() == 0x1af4 &&
+//                           d.DeviceId() >= 0x1000 &&
+//                           d.DeviceId() <= 0x103f &&
+//                           d.GeneralHeaderType() &&
+//                           d.SubsystemId() == 1;
+//                         });
+//
   LRT_ASSERT(it != pci->DevicesEnd());
   uint8_t ptr = it->FindCapability(PCI::Device::CAP_MSIX);
   LRT_ASSERT(ptr != 0);
