@@ -166,7 +166,7 @@ fi
 #################################################
 
 if [[ $barerun == 1 ]]; then
-  $SESA_GET -i $APPNAME $BARE_IMG $count
+  $SESA_GET -i -d $CONFIG $APPNAME $BARE_32 $count
 fi
 
 

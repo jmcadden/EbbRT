@@ -748,14 +748,14 @@ HPCloudConfigNodes()
 HPCloudAllocNodes()
 {
   local nodes="$1"
-  local num=${#nodes[@]}
-  local active=$(($(hpcloud servers | grep ACTIVE | wc -l)+$num))
+  local active=$(($(hpcloud servers | grep ACTIVE | wc -l)))
 
 
-  echo "Allocating $num nodes "
   for i in ${nodes[@]}
   do
+    echo "Allocating node kh_$i"
     hpcloud servers:add "kh_"$i xsmall --key_name ssh
+    let active=$active+1
   done
 
 
@@ -824,14 +824,13 @@ HPCloudFreeApp()
 HPCloudFreeNodes()
 {
   local nodes="$1"
-  local num=${#nodes[@]}
-
-  local remaining=$(($(hpcloud servers | grep ACTIVE | wc -l)-$num))
+  local remaining=$(($(hpcloud servers | grep ACTIVE | wc -l)))
 
   for i in ${nodes[@]}
   do
-    echo "Freeing node $i"
+    echo "Freeing node kh_$i"
     hpcloud servers:remove "kh_"$i >/dev/null 2>&1
+    let remaining=$remaining-1
 
   done
 
@@ -848,11 +847,9 @@ HPCloudRebootNodes()
 {
   local nodes="$1"
 
-  local remaining=$(($(hpcloud servers | grep ACTIVE | wc -l)))
-
   for i in ${nodes[@]}
   do
-   echo "Rebooting node $i"
+   echo "Rebooting node kh_$i"
    hpcloud servers:reboot "kh_"$i >/dev/null 2>&1
   done
 
