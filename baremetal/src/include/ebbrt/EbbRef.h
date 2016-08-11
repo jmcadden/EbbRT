@@ -6,6 +6,7 @@
 #define BAREMETAL_SRC_INCLUDE_EBBRT_EBBREF_H_
 
 #include <ebbrt/Compiler.h>
+#include <ebbrt/Debug.h>
 #include <ebbrt/EbbId.h>
 #include <ebbrt/LocalEntry.h>
 #include <ebbrt/Trans.h>
@@ -40,6 +41,7 @@ template <class T> class EbbRef {
     auto lref = *reinterpret_cast<T**>(ref_);
     if (unlikely(lref == nullptr)) {
       auto id = (ref_ - trans::kVMemStart) / sizeof(LocalEntry);
+      { ebbrt::kprintf("LOG:\t0x%lx\t%s\n", id, typeid(T).name()); }
       lref = &(T::HandleFault(id));
     }
     return *lref;
