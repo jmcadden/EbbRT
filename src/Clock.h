@@ -2,10 +2,13 @@
 // Distributed under the Boost Software License, Version 1.0.
 //    (See accompanying file LICENSE_1_0.txt or copy at
 //          http://www.boost.org/LICENSE_1_0.txt)
-#include "Clock.h"
+#ifndef COMMON_SRC_INCLUDE_EBBRT_CLOCK_H_
+#define COMMON_SRC_INCLUDE_EBBRT_CLOCK_H_
 
-ebbrt::clock::HighResTimer::DoOnce ebbrt::clock::HighResTimer::once;
+#ifdef __ebbrt__
+#include "native/Clock.h"
+#else
+#include "hosted/Clock.h"
+#endif
 
-ebbrt::clock::Wall::time_point ebbrt::clock::Wall::Now() noexcept {
-  return std::chrono::system_clock::now();
-}
+#endif //COMMON_SRC_INCLUDE_EBBRT_CLOCK_H_

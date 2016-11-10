@@ -10,6 +10,16 @@
 namespace ebbrt {
 namespace clock {
 
+class Wall {
+ public:
+  typedef std::chrono::nanoseconds duration;
+  typedef std::chrono::time_point<std::chrono::system_clock> time_point;
+
+  static time_point Now() noexcept;
+  // To keep compatability with standard clock interfaces
+  static time_point now() { return Now(); }
+};
+
 class HighResTimer {
  public:
   void tick() __attribute__((always_inline)) {
