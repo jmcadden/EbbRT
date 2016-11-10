@@ -8,6 +8,7 @@
 #include <boost/coroutine/coroutine.hpp>
 
 #include "../CacheAligned.h"
+#include "../Debug.h"
 #include "../MoveLambda.h"
 #include "../StaticSharedEbb.h"
 #include "EventContext.h"
@@ -32,6 +33,9 @@ class EventManager : public StaticSharedEbb<EventManager>, public CacheAligned {
   }
   void ActivateContext(EventManager::EventContext&& context);
   void SaveContext(EventManager::EventContext& context);
+  void DoRcu(ebbrt::MovableFunction<void()> func){
+    Spawn(std::move(func), active_context);
+  };
   void InvokeFunction(MovableFunction<void()>* f) {
     try {
       (*f)();
