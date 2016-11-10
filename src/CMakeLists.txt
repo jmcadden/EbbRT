@@ -32,7 +32,12 @@ CAPNP_GENERATE_CPP(CAPNP_GENERATED_SOURCES CAPNP_GENERATED_HEADERS
 
 # EbbRT Library 
 add_library(EbbRT STATIC ${COMMON_SOURCES} ${PLATFORM_SOURCES}
-  ${CAPNP_GENERATED_SOURCES})
+  ${CAPNP_GENERATED_SOURCES} )
+
+if( __EBBRT_HOSTED_DPDK_DRIVER__ )
+  add_library(EbbRT-Dpdk ${EBBRT_DPDK_SOURCES})
+  target_link_libraries(EbbRT EbbRT-Dpdk)
+endif()
 
 # Install
 install(TARGETS EbbRT ARCHIVE DESTINATION lib
@@ -40,6 +45,10 @@ install(TARGETS EbbRT ARCHIVE DESTINATION lib
 install(FILES ${COMMON_HEADERS} DESTINATION include/ebbrt)
 install(FILES ${PLATFORM_HEADERS} DESTINATION include/ebbrt/${PLATFORM})
 install(FILES ${CAPNP_GENERATED_HEADERS} DESTINATION include/ebbrt)
+
+if( __EBBRT_HOSTED_DPDK_DRIVER__ )
+  install(FILES ${EBBRT_DPDK_HEADERS} DESTINATION include/ebbrt/native)
+endif()
 
 # Only create cmake package for hosted runtime
 if( ${CMAKE_SYSTEM_NAME} STREQUAL "Linux") 
