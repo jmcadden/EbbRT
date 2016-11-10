@@ -7,8 +7,8 @@
 #include "../IOBufRef.h"
 #include "../Timer.h"
 #include "../UniqueIOBuf.h"
-#include "NetChecksum.h"
 #include "Random.h"
+#include "NetChecksum.h"
 
 // Destroy a listening tcp pcb
 void ebbrt::NetworkManager::ListeningTcpPcb::ListeningTcpEntryDeleter::
@@ -230,6 +230,7 @@ void ebbrt::NetworkManager::Interface::ReceiveTcp(
     if (entry->cpu == Cpu::GetMine()) {
       entry->Input(ih, tcp_header, info, std::move(buf));
     } else {
+#ifndef __EBBRT_HOSTED_DPDK_DRIVER__
       // XXX: Really nervous about passing these references, but I think its all
       // safe, for now
       auto f = [
@@ -238,6 +239,9 @@ void ebbrt::NetworkManager::Interface::ReceiveTcp(
         entry->Input(ih, tcp_header, info, std::move(buf));
       };
       event_manager->SpawnRemote(std::move(f), entry->cpu);
+#else
+      EBBRT_UNIMPLEMENTED();
+#endif
     }
   } else {
     // If no connection found, check listening pcbs
@@ -446,7 +450,11 @@ void ebbrt::NetworkManager::ListeningTcpEntry::Input(
     if (entry->cpu == Cpu::GetMine()) {
       f();
     } else {
+#ifndef __EBBRT_HOSTED_DPDK_DRIVER__
       event_manager->SpawnRemote(std::move(f), entry->cpu);
+#else
+      EBBRT_UNIMPLEMENTED();
+#endif
     }
   }
 }

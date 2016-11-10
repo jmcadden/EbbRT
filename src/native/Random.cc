@@ -7,7 +7,7 @@
 #include <random>
 
 #include "../ExplicitlyConstructed.h"
-#include "Clock.h"
+#include "../Clock.h"
 
 namespace {
 ebbrt::ExplicitlyConstructed<std::mt19937> gen;

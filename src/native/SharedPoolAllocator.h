@@ -12,6 +12,7 @@
 #pragma GCC diagnostic pop
 #include <boost/optional.hpp>
 
+#include "../Compiler.h"
 #include "../CacheAligned.h"
 #include "../SharedEbb.h"
 

@@ -5,6 +5,7 @@
 #include "Net.h"
 
 #include <cinttypes>
+#include <boost/intrusive/parent_from_member.hpp>
 
 #include "../Timer.h"
 #include "../UniqueIOBuf.h"

@@ -6,7 +6,7 @@
 #define BAREMETAL_SRC_INCLUDE_EBBRT_RCU_H_
 
 #include "../Future.h"
-#include "EventManager.h"
+#include "../EventManager.h"
 
 namespace ebbrt {
 // non void return implementation

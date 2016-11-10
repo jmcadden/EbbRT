@@ -13,11 +13,14 @@
 #include <tuple>
 
 #include "../AtomicUniquePtr.h"
+#include "../Clock.h"
+#include "../Debug.h"
+#include "../EventManager.h"
 #include "../IOBuf.h"
 #include "../SpinLock.h"
 #include "../StaticSharedEbb.h"
-#include "Clock.h"
-#include "EventManager.h"
+#include "../Timer.h"
+
 #include "NetDhcp.h"
 #include "NetEth.h"
 #include "NetIp.h"
@@ -52,7 +55,7 @@ class EthernetDevice {
 class NetworkManager : public StaticSharedEbb<NetworkManager> {
  public:
   struct UdpEntry {
-    RcuHListHook hook;
+  RcuHListHook hook;
     uint16_t port{0};
     MovableFunction<void(Ipv4Address, uint16_t, std::unique_ptr<MutIOBuf>)>
         func;
@@ -95,7 +98,7 @@ class NetworkManager : public StaticSharedEbb<NetworkManager> {
   struct ListeningTcpEntry : public CacheAligned {
     void Input(const Ipv4Header& ih, TcpHeader& th, TcpInfo& info,
                std::unique_ptr<MutIOBuf> buf);
-    RcuHListHook hook;
+  RcuHListHook hook;
     uint16_t port{0};
     MovableFunction<void(TcpPcb)> accept_fn;
   };
@@ -146,7 +149,7 @@ class NetworkManager : public StaticSharedEbb<NetworkManager> {
     void DisableTimers();
     void Destroy();
 
-    RcuHListHook hook;
+  RcuHListHook hook;
     size_t cpu;
     Ipv4Address address;
     std::tuple<Ipv4Address, uint16_t, uint16_t> key;
@@ -330,7 +333,9 @@ class NetworkManager : public StaticSharedEbb<NetworkManager> {
   alignas(cache_size) ebbrt::SpinLock listening_tcp_write_lock_;
   alignas(cache_size) ebbrt::SpinLock tcp_write_lock_;
 
+#ifndef __EBBRT_HOSTED_DPDK_DRIVER__
   friend void ebbrt::Main(ebbrt::multiboot::Information* mbi);
+#endif
 };
 
 constexpr auto network_manager = EbbRef<NetworkManager>(kNetworkManagerId);
