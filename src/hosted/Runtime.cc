@@ -10,6 +10,9 @@
 #include "LocalIdMap.h"
 #include "Messenger.h"
 #include "NodeAllocator.h"
+#ifdef __EBBRT_HOSTED_DPDK_DRIVER__
+#include "Dpdk.h"
+#endif 
 
 ebbrt::Runtime::Runtime() : initialized_(false), indices_(0) {}
 
@@ -39,4 +42,7 @@ void ebbrt::Runtime::DoInitialization() {
   Messenger::Init();
   NodeAllocator::Init();
   Timer::Init();
+#ifdef __EBBRT_HOSTED_DPDK_DRIVER__
+  DpdkNetDriver::Init();
+#endif 
 }

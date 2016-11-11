@@ -18,10 +18,12 @@ set(EBBRT_DPDK_HEADERS
     ${PROJECT_SOURCE_DIR}/native/NetChecksum.h
     ${PROJECT_SOURCE_DIR}/native/NetDhcp.h
     ${PROJECT_SOURCE_DIR}/native/NetEth.h
+    ${PROJECT_SOURCE_DIR}/native/NetIcmp.h
     ${PROJECT_SOURCE_DIR}/native/NetIp.h
     ${PROJECT_SOURCE_DIR}/native/NetIpAddress.h
     ${PROJECT_SOURCE_DIR}/native/NetMisc.h
     ${PROJECT_SOURCE_DIR}/native/NetTcp.h
+    ${PROJECT_SOURCE_DIR}/native/NetUdp.h
     ${PROJECT_SOURCE_DIR}/native/Random.h
     ${PROJECT_SOURCE_DIR}/native/Rcu.h
     ${PROJECT_SOURCE_DIR}/native/RcuList.h
@@ -33,7 +35,9 @@ set(EBBRT_DPDK_SOURCES
     ${PROJECT_SOURCE_DIR}/native/NetChecksum.cc
     ${PROJECT_SOURCE_DIR}/native/NetDhcp.cc
     ${PROJECT_SOURCE_DIR}/native/NetEth.cc
+    ${PROJECT_SOURCE_DIR}/native/NetIcmp.cc
     ${PROJECT_SOURCE_DIR}/native/NetIp.cc
     ${PROJECT_SOURCE_DIR}/native/NetTcp.cc
+    ${PROJECT_SOURCE_DIR}/native/NetUdp.cc
     ${PROJECT_SOURCE_DIR}/native/Random.cc
     )
