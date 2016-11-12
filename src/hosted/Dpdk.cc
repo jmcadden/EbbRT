@@ -5,17 +5,119 @@
 #ifdef __EBBRT_HOSTED_DPDK_DRIVER__
 
 #include <cstdio>
-//#include <rte_eal.h>
-//#include <rte_ethdev.h>
-//#include <rte_cycles.h>
-//#include <rte_lcore.h>
-//#include <rte_mbuf.h>
+#include <iostream>
 #include "Dpdk.h"
+
+unsigned int portmask;
+static struct rte_mempool *mbuf_pool;
+
+
+int
+ebbrt::Dpdk::ConfigurePort(uint8_t port_id)
+{
+	struct ether_addr addr;
+	const uint16_t rxRings = 1, txRings = 1;
+	const uint8_t nb_ports = rte_eth_dev_count();
+	int ret;
+	uint16_t q;
+  struct rte_eth_conf port_conf_default;
+  port_conf_default.rxmode.max_rx_pkt_len = ETHER_MAX_LEN;
+
+	if (port_id > nb_ports)
+		return -1;
+
+	ret = rte_eth_dev_configure(port_id, rxRings, txRings, &port_conf_default);
+	if (ret != 0)
+		return ret;
+
+	for (q = 0; q < rxRings; q++) {
+		ret = rte_eth_rx_queue_setup(port_id, q, RX_DESC_PER_QUEUE,
+				rte_eth_dev_socket_id(port_id), NULL,
+				mbuf_pool);
+		if (ret < 0)
+			return ret;
+	}
+
+	for (q = 0; q < txRings; q++) {
+		ret = rte_eth_tx_queue_setup(port_id, q, TX_DESC_PER_QUEUE,
+				rte_eth_dev_socket_id(port_id), NULL);
+		if (ret < 0)
+			return ret;
+	}
+
+	ret = rte_eth_dev_start(port_id);
+	if (ret < 0)
+		return ret;
+
+	rte_eth_macaddr_get(port_id, &addr);
+	printf("Port %u MAC: %02" PRIx8 " %02" PRIx8 " %02" PRIx8
+			" %02" PRIx8 " %02" PRIx8 " %02" PRIx8 "\n",
+			(unsigned)port_id,
+			addr.addr_bytes[0], addr.addr_bytes[1],
+			addr.addr_bytes[2], addr.addr_bytes[3],
+			addr.addr_bytes[4], addr.addr_bytes[5]);
+
+	rte_eth_promiscuous_enable(port_id);
+
+	return 0;
+}
 
 int ebbrt::Dpdk::Init(int argc, char** argv) {
   /* initialize the DPDK environment */
-  std::cout << "DPDK Initialized" << std::endl;
-  return 0;
+	struct rte_ring *rx_to_workers;
+	struct rte_ring *workers_to_tx;
+
+	auto ret = rte_eal_init(argc, argv);
+	if (ret < 0)
+		rte_exit(EXIT_FAILURE, "Error with EAL initialization\n");
+
+	auto nb_ports = rte_eth_dev_count();
+	if (nb_ports == 0)
+		rte_exit(EXIT_FAILURE, "Error: no ethernet ports detected\n");
+	if (nb_ports != 1 && (nb_ports & 1))
+		rte_exit(EXIT_FAILURE, "Error: number of ports must be even, except "
+				"when using a single port\n");
+
+	mbuf_pool = rte_pktmbuf_pool_create("mbuf_pool", MBUF_PER_POOL,
+			MBUF_POOL_CACHE_SIZE, 0, RTE_MBUF_DEFAULT_BUF_SIZE,
+			rte_socket_id());
+	if (mbuf_pool == NULL)
+		rte_exit(EXIT_FAILURE, "%s\n", rte_strerror(rte_errno));
+
+	auto nb_ports_available = nb_ports;
+
+	/* initialize all ports */
+	for (auto port_id = 0; port_id < nb_ports; port_id++) {
+		/* skip ports that are not enabled */
+		if ((portmask & (1 << port_id)) == 0) {
+			printf("\nSkipping disabled port %d\n", port_id);
+			nb_ports_available--;
+			continue;
+		}
+		/* init port */
+		printf("Initializing port %u... done\n", (unsigned) port_id);
+
+		if (ebbrt::Dpdk::ConfigurePort(port_id) != 0)
+			rte_exit(EXIT_FAILURE, "Cannot initialize port %" PRIu8 "\n",
+					port_id);
+	}
+
+	if (!nb_ports_available) {
+		rte_exit(EXIT_FAILURE,
+			"All available ports are disabled. Please set portmask.\n");
+	}
+
+	/* Create rings for inter core communication */
+	rx_to_workers = rte_ring_create("rx_to_workers", RING_SIZE, rte_socket_id(),
+			RING_F_SP_ENQ);
+	if (rx_to_workers == NULL)
+		rte_exit(EXIT_FAILURE, "%s\n", rte_strerror(rte_errno));
+
+	workers_to_tx = rte_ring_create("workers_to_tx", RING_SIZE, rte_socket_id(),
+			RING_F_SC_DEQ);
+	if (workers_to_tx == NULL)
+		rte_exit(EXIT_FAILURE, "%s\n", rte_strerror(rte_errno));
+  return ret;
 }
 
 ebbrt::DpdkNetDriver::DpdkNetDriver()
