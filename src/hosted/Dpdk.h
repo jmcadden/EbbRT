@@ -8,6 +8,7 @@
 
 #include "../MulticoreEbb.h"
 #include "../native/Net.h"
+#include "../Debug.h"
 
 #include <rte_config.h>
 #include <rte_eal.h>
@@ -39,23 +40,27 @@
 
 namespace ebbrt {
 namespace Dpdk {
-int Init(int argc, char** argv); 
-int ConfigurePort(uint8_t port_id); 
+  int Init(int argc, char** argv); 
+  void mbuf_receive_poll_();
 }  // namespace Dpdk
+
 class DpdkNetRep;
 class DpdkNetDriver : public EthernetDevice {
  public:
-  static void Init();
-
   explicit DpdkNetDriver();
   void Send(std::unique_ptr<IOBuf> buf, PacketInfo pinfo) override;
   const EthernetAddress& GetMacAddress() override;
+  void ConfigurePort(uint8_t port_id); 
 
  private:
+	unsigned portid;
   void Start();
   EbbRef<DpdkNetRep> ebb_;
   EthernetAddress mac_addr_;
   NetworkManager::Interface& itf_;
+  struct rte_mempool *mbuf_pool_; //make unique ptrs
+	rte_ring *rx_to_workers;
+	rte_ring *workers_to_tx;
 
   friend class DpdkNetRep;
 };
@@ -66,7 +71,7 @@ class DpdkNetRep : public MulticoreEbb<DpdkNetRep, DpdkNetDriver> {
   void Receive();
 
  private:
-  const DpdkNetDriver& root_;
+  const DpdkNetDriver& eth_dev_;
   void ReceivePoll();
 };
 }  // namespace ebbrt
