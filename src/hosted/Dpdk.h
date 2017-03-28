@@ -51,11 +51,11 @@ class DpdkNetDriver : public EthernetDevice {
   void Send(std::unique_ptr<IOBuf> buf, PacketInfo pinfo) override;
   const EthernetAddress& GetMacAddress() override;
   void ConfigurePort(uint8_t port_id); 
+  EbbRef<DpdkNetRep> ebb_;
 
  private:
 	unsigned portid;
   void Start();
-  EbbRef<DpdkNetRep> ebb_;
   EthernetAddress mac_addr_;
   NetworkManager::Interface& itf_;
   struct rte_mempool *mbuf_pool_; //make unique ptrs

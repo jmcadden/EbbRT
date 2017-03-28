@@ -43,6 +43,6 @@ void ebbrt::Runtime::DoInitialization() {
   NodeAllocator::Init();
   Timer::Init();
 #ifdef __EBBRT_HOSTED_DPDK_DRIVER__
-  DpdkNetDriver::Init();
+  //DpdkNetDriver::Init();
 #endif 
 }

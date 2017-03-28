@@ -44,7 +44,7 @@ void mbuf_receive_poll_(){
 			rte_lcore_id(), nb_rx);
 
       /* drop all packets */
-			rte_pktmbuf_free(pkt);
+			//rte_pktmbuf_free(pkt);
 	}
 }
 
@@ -74,8 +74,8 @@ ebbrt::DpdkNetDriver::ConfigurePort(uint8_t port_id)
 		rte_exit(EXIT_FAILURE, "%s\n", rte_strerror(rte_errno));
 
 	ret = rte_eth_dev_configure(port_id, rxRings, txRings, &port_conf_default);
-	if (ret != 0)
-		return ret;
+	//if (ret != 0)
+	//	return ret;
 
 //	/* Create rings for inter core communication */
 //	rx_to_workers = rte_ring_create("rx_to_workers", RING_SIZE, rte_socket_id(),
@@ -93,23 +93,23 @@ ebbrt::DpdkNetDriver::ConfigurePort(uint8_t port_id)
 		ret = rte_eth_rx_queue_setup(port_id, q, RX_DESC_PER_QUEUE,
 				rte_eth_dev_socket_id(port_id), NULL,
 				mbuf_pool_);
-		if (ret < 0)
-			return ret;
+		//if (ret < 0)
+		//	return ret;
 	}
 
 	for (q = 0; q < txRings; q++) {
 		ret = rte_eth_tx_queue_setup(port_id, q, TX_DESC_PER_QUEUE,
 				rte_eth_dev_socket_id(port_id), NULL);
-		if (ret < 0)
-			return ret;
+		//if (ret < 0)
+		//	return ret;
 	}
 
 	ret = rte_eth_dev_start(port_id);
-	if (ret < 0)
-		return ret;
+	//if (ret < 0)
+	//	return ret;
 
 	rte_eth_macaddr_get(port_id, &addr);
-  mac_addr_ = new EthernetAddress(addr.addr_bytes);
+  //mac_addr_ = new EthernetAddress(addr.addr_bytes);
 	printf("Port %u MAC: %02" PRIx8 " %02" PRIx8 " %02" PRIx8
 			" %02" PRIx8 " %02" PRIx8 " %02" PRIx8 "\n",
 			(unsigned)port_id,
@@ -119,7 +119,8 @@ ebbrt::DpdkNetDriver::ConfigurePort(uint8_t port_id)
 
 	rte_eth_promiscuous_enable(port_id);
 
-	return 0;
+	(void)ret;
+	return;
 }
 
 /*
@@ -165,6 +166,7 @@ int ebbrt::Dpdk::Init(int argc, char** argv) {
 		rte_exit(EXIT_FAILURE,
 			"All available ports are disabled. Please set portmask.\n");
 	}
+return -1;
 }
 
 ebbrt::DpdkNetDriver::DpdkNetDriver()
