@@ -9,6 +9,8 @@
 #include "../MulticoreEbb.h"
 #include "../native/Net.h"
 #include "../Debug.h"
+#include "../Debug.h"
+#include "../Timer.h"
 
 #include <rte_config.h>
 #include <rte_eal.h>
@@ -33,29 +35,43 @@
 #define MBUF_PER_POOL 65535
 #define MBUF_POOL_CACHE_SIZE 250
 
-
 #define RING_SIZE 16384
 #define REORDER_BUFFER_SIZE 8192
 #define MBUF_PER_POOL 65535
 
+#define POLL_FREQ 10000 //microseconds
+
 namespace ebbrt {
 namespace Dpdk {
   int Init(int argc, char** argv); 
-  void mbuf_receive_poll_();
-}  // namespace Dpdk
+}  
 
 class DpdkNetRep;
+  /* ROLES
+   * Initialize EAL
+   * Allocate mempool to hold membufs
+   * Initilize ports:
+   *   - Configure eth dev
+   *   - Allocate RX and TX queues
+   *   - Start the device, enable permis on RX
+   *   - Add callbacks to RX and TX (apply to packen on recv, or pre-send)
+   *    - callback to covert to IOBuf?
+   *    Depending on driver capabilities advertised by rte_eth_dev_info_get(),
+   *    the PMD may support hardware offloading feature like checksumming, TCP
+   *    segmentation or VLAN insertion.The support of these offload features
+   *    implies the addition of dedicated status bit(s) and value field(s)
+   *    into the rte_mbuf data structure. 
+  */
 class DpdkNetDriver : public EthernetDevice {
- public:
+public:
   explicit DpdkNetDriver();
   void Send(std::unique_ptr<IOBuf> buf, PacketInfo pinfo) override;
   const EthernetAddress& GetMacAddress() override;
-  void ConfigurePort(uint8_t port_id); 
+  int ConfigurePort(uint8_t port_id); 
   EbbRef<DpdkNetRep> ebb_;
 
  private:
 	unsigned portid;
-  void Start();
   EthernetAddress mac_addr_;
   NetworkManager::Interface& itf_;
   struct rte_mempool *mbuf_pool_; //make unique ptrs
@@ -65,16 +81,27 @@ class DpdkNetDriver : public EthernetDevice {
   friend class DpdkNetRep;
 };
 
-class DpdkNetRep : public MulticoreEbb<DpdkNetRep, DpdkNetDriver> {
-  explicit DpdkNetRep(const DpdkNetDriver& root);
+  /* ROLES (PMD)
+   * Recv input packets from PMD recv API
+   * Process each packet up the IO stack
+   * Send pending output packets through PMD transmit API
+   * Seperate TX queue per-core per-port
+   * Each recv port is assigned too and polled by single core
+   * 
+   */
+class DpdkNetRep : public MulticoreEbb<DpdkNetRep, DpdkNetDriver>, public Timer::Hook {
+public:
+  explicit DpdkNetRep(const DpdkNetDriver& root) : eth_dev_{root}{};
   void Send(std::unique_ptr<IOBuf> buf, PacketInfo pinfo);
   void Receive();
+  void Start();
 
  private:
-  const DpdkNetDriver& eth_dev_;
+  void Fire() override;
   void ReceivePoll();
+  const DpdkNetDriver& eth_dev_;
 };
-}  // namespace ebbrt
 
+}  // namespace ebbrt
 #endif  // __EBBRT_HOSTED_DPDK_DRIVER__
 #endif  // HOSTED_SRC_INCLUDE_EBBRT_DPDK_DPDK_H_

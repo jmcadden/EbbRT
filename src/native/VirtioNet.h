@@ -45,6 +45,7 @@ class VirtioNetRep : public MulticoreEbb<VirtioNetRep, VirtioNetDriver> {
   explicit VirtioNetRep(const VirtioNetDriver& root);
   void Send(std::unique_ptr<IOBuf> buf, PacketInfo pinfo);
   void Receive();
+  void Start();
 
  private:
   void FillRxRing();
