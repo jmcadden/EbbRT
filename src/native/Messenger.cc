@@ -239,6 +239,7 @@ ebbrt::Future<void> ebbrt::Messenger::Send(NetworkId to, EbbId id,
 
   return connection_map_[to.ip].Then([data = std::move(buf)](
       SharedFuture<Connection*> f) mutable {
+      ebbrt::kprintf("Outgoing msg size=%d\n", data->ComputeChainDataLength());
     f.Get()->Send(std::move(data));
     f.Get()->Pcb().Output();
   });

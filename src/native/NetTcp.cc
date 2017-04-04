@@ -940,6 +940,7 @@ ebbrt::NetworkManager::TcpEntry::Output(ebbrt::clock::Wall::time_point now) {
 
   // If we sent some segments, add them to the unacked list
   if (sent) {
+    ebbrt::kprintf("Send %u of %u tcp segments.\n", sent, pending_segments.size());
     unacked_segments.splice(unacked_segments.end(), std::move(pending_segments),
                             pending_segments.begin(), it, sent);
   } else {
