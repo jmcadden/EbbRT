@@ -22,7 +22,7 @@ void ebbrt::NetworkManager::Interface::Receive(std::unique_ptr<MutIOBuf> buf) {
   auto dp = buf->GetMutDataPointer();
   auto& eth_header = dp.Get<EthernetHeader>();
 
-  buf->Advance(sizeof(EthernetHeader));
+  buf->AdvanceChain(sizeof(EthernetHeader));
 
   switch (ntohs(eth_header.type)) {
   case kEthTypeIp: {

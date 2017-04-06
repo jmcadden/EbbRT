@@ -7,6 +7,9 @@
 #include <cstdio>
 #include <iostream>
 #include "Dpdk.h"
+#include "../UniqueIOBuf.h"
+#include "../StaticIOBuf.h"
+#include "../IOBufRef.h"
 
 unsigned int portmask;
 
@@ -150,10 +153,32 @@ void ebbrt::DpdkNetRep::ReceivePoll() {
     std::cout << "Core "<< rte_lcore_id() <<  " received " << nb_rx << " packets" << std::endl;
     for( int i=0; i<nb_rx; ++i){
       auto p = bufs[i];
-      std::cout << "Packet #" << i << " type=" << p->packet_type << " plen=" << p->pkt_len << " dlen=" << p->data_len << " buflen=" << p->buf_len << std::endl;
+      std::cout << "Packet #" << i 
+        << " type=" << p->packet_type 
+        << " pkt len=" << rte_pktmbuf_pkt_len(p) // sum of all segments
+        << " data len=" << rte_pktmbuf_data_len(p) // sum in segment buffer
+        << " buflen=" << p->buf_len 
+        << " segments=" << p->nb_segs 
+        << std::endl;
+
+      /* check for multi-segment mbufs */
+      ebbrt::kbugon((rte_pktmbuf_pkt_len(p) != rte_pktmbuf_data_len(p)));
+      /* check for control mbufs */
+      ebbrt::kbugon(rte_is_ctrlmbuf(p));
+       auto rbuf = MakeUniqueIOBuf(0);
+       auto tmp = std::make_unique<StaticIOBuf>(
+                  reinterpret_cast<const uint8_t*>(p->buf_addr),
+                         static_cast<size_t>(rte_pktmbuf_pkt_len(p)));
+      rbuf->PrependChain(std::move(tmp));
+
+      //auto rbuf = std::unique_ptr<MutUniqueIOBuf>(new MutUniqueIOBuf(reinterpret_cast<uint8_t*>(p->buf_addr),static_cast<size_t>(rte_pktmbuf_pkt_len(p))));
+      
+      //auto rbuf = std::unique_ptr<MutIOBufRef>(new MutIOBufRef(reinterpret_cast<uint8_t*>(p->buf_addr),static_cast<size_t>(rte_pktmbuf_pkt_len(p))));
+      eth_dev_.itf_.Receive(std::move(rbuf));
     }
   }
-  // root_.itf_.Receive(std::move(b));
+
+  
   return;
 }
 
