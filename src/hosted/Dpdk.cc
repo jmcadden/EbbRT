@@ -11,7 +11,7 @@
 unsigned int portmask;
 
 /*
- * Configure driver for DPDK Ethernet port
+ * Initilizae a given port using global settings
  */
 int
 ebbrt::DpdkNetDriver::ConfigurePort(uint8_t port_id)
@@ -22,23 +22,24 @@ ebbrt::DpdkNetDriver::ConfigurePort(uint8_t port_id)
 	uint16_t q;
   struct rte_eth_conf port_conf_default;
   port_conf_default.rxmode.max_rx_pkt_len = ETHER_MAX_LEN;
+  port_ = port_id;
 
 	if (port_id > rte_eth_dev_count())
 		rte_exit(EXIT_FAILURE, "%s\n", rte_strerror(rte_errno));
 
-  /* Initialize a memory pool for the device */
+	/* Creates a new mempool in memory to hold the mbufs. */
 	mbuf_pool_ = rte_pktmbuf_pool_create("mbuf_pool", MBUF_PER_POOL,
 			MBUF_POOL_CACHE_SIZE, 0, RTE_MBUF_DEFAULT_BUF_SIZE,
 			rte_socket_id());
 	if (mbuf_pool_ == NULL)
 		rte_exit(EXIT_FAILURE, "%s\n", rte_strerror(rte_errno));
 
-	/* Configure device */
+	/* Configure the Ethernet device. */
 	ret = rte_eth_dev_configure(port_id, rxRings, txRings, &port_conf_default);
 	if (ret < 0)
 		return ret;
 
-  //* Configure RX queue */
+	/* Allocate and set up 1 RX queue per Ethernet port. */
 	for (q = 0; q < rxRings; q++) {
 		ret = rte_eth_rx_queue_setup(port_id, q, RX_DESC_PER_QUEUE,
 				rte_eth_dev_socket_id(port_id), NULL,
@@ -47,7 +48,7 @@ ebbrt::DpdkNetDriver::ConfigurePort(uint8_t port_id)
 			return ret;
 	}
 
-  //* Configure TX queue */
+	/* Allocate and set up 1 TX queue per Ethernet port. */
 	for (q = 0; q < txRings; q++) {
 		ret = rte_eth_tx_queue_setup(port_id, q, TX_DESC_PER_QUEUE,
 				rte_eth_dev_socket_id(port_id), NULL);
@@ -55,13 +56,14 @@ ebbrt::DpdkNetDriver::ConfigurePort(uint8_t port_id)
 			return ret;
 	}
 
+	/* Start the Ethernet port. */
 	ret = rte_eth_dev_start(port_id);
 	if (ret < 0)
 		return ret;
 
+	/* Display the port MAC address. */
 	rte_eth_macaddr_get(port_id, &addr);
-  // TODO: 
-  //mac_addr_ = new EthernetAddress(addr.addr_bytes);
+  // TODO: mac_addr_ = new ebbrt::EthernetAddress(addr.addr_bytes);
 	printf("Port %u MAC: %02" PRIx8 " %02" PRIx8 " %02" PRIx8
 			" %02" PRIx8 " %02" PRIx8 " %02" PRIx8 "\n",
 			(unsigned)port_id,
@@ -69,13 +71,14 @@ ebbrt::DpdkNetDriver::ConfigurePort(uint8_t port_id)
 			addr.addr_bytes[2], addr.addr_bytes[3],
 			addr.addr_bytes[4], addr.addr_bytes[5]);
 
+	/* Enable RX in promiscuous mode for the Ethernet device. */
 	rte_eth_promiscuous_enable(port_id);
 
 	return 0;
 }
 
 /*
- * Initialize the DPDK Environment 
+ * Initialize the DPDK Environment Abstraction Layer
  */
 int ebbrt::Dpdk::Init(int argc, char** argv) {
 
@@ -130,7 +133,7 @@ const ebbrt::EthernetAddress& ebbrt::DpdkNetDriver::GetMacAddress() {
 
 void ebbrt::DpdkNetRep::Start(){
   std::cout << "Beginning Receive Poll" << std::endl;
-	timer->Start(*this, std::chrono::milliseconds(POLL_FREQ), true);
+	timer->Start(*this, std::chrono::microseconds(POLL_FREQ), true);
 }
 
 void ebbrt::DpdkNetRep::Fire(){
@@ -139,7 +142,17 @@ void ebbrt::DpdkNetRep::Fire(){
 
 
 void ebbrt::DpdkNetRep::ReceivePoll() {
-  std::cout << "DPDK ReceivePoll" << std::endl;
+	/* Get burst of RX packets from the assigned port */
+	struct rte_mbuf *bufs[BURST_SIZE];
+	const uint16_t nb_rx = rte_eth_rx_burst(eth_dev_.port_, 0,
+			bufs, BURST_SIZE);
+  if( nb_rx != 0){
+    std::cout << "Core "<< rte_lcore_id() <<  " received " << nb_rx << " packets" << std::endl;
+    for( int i=0; i<nb_rx; ++i){
+      auto p = bufs[i];
+      std::cout << "Packet #" << i << " type=" << p->packet_type << " plen=" << p->pkt_len << " dlen=" << p->data_len << " buflen=" << p->buf_len << std::endl;
+    }
+  }
   // root_.itf_.Receive(std::move(b));
   return;
 }
