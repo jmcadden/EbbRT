@@ -335,6 +335,8 @@ class NetworkManager : public StaticSharedEbb<NetworkManager> {
 
 #ifndef __EBBRT_HOSTED_DPDK_DRIVER__
   friend void ebbrt::Main(ebbrt::multiboot::Information* mbi);
+#else
+  friend class DpdkNetDriver;
 #endif
 };
 

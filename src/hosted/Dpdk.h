@@ -37,9 +37,11 @@
 
 #define RING_SIZE 16384
 #define REORDER_BUFFER_SIZE 8192
-#define MBUF_PER_POOL 65535
 
 #define POLL_FREQ 1000 //microseconds
+
+#define UDP_CHECKSUM_OFFSET 0x6
+#define TCP_CHECKSUM_OFFSET 0x10
 
 namespace ebbrt {
 namespace Dpdk {
@@ -72,7 +74,6 @@ public:
 
  private:
 	uint8_t port_;
-  struct rte_eth_dev eth_dev_; /*device represented by a generic data structure of type rte_eth_dev*/
   EthernetAddress mac_addr_;
   NetworkManager::Interface& itf_;
   struct rte_mempool *mbuf_pool_; //make unique ptrs
