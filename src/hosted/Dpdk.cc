@@ -11,6 +11,11 @@
 #include "../StaticIOBuf.h"
 #include "../IOBufRef.h"
 
+#include <rte_ip.h>
+#include <rte_ip.h>
+#include <rte_udp.h>
+#include <rte_ethdev.h>
+
 unsigned int portmask;
 
 /*
@@ -81,6 +86,14 @@ ebbrt::DpdkNetDriver::ConfigurePort(uint8_t port_id)
 
 	/* Enable RX in promiscuous mode for the Ethernet device. */
 	rte_eth_promiscuous_enable(port_id);
+
+  //TODO: Verify checksum offload
+#if 0
+  struct rte_eth_dev_info info;
+  rte_eth_dev_info_get(eth_dev_.port_, &info);
+  bool support = info.tx_offload_capa & DEV_TX_OFFLOAD_UDP_CKSUM;
+  ebbrt::kbugon(!support);
+#endif
 
 	return 0;
 }
@@ -162,13 +175,10 @@ void ebbrt::DpdkNetRep::Send(std::unique_ptr<IOBuf> buf, PacketInfo pinfo){
     }
   }
 
-  //auto dp = buf->GetDataPointer();
-  //dp->Advance(sizeof(EthernetHeader));
-  //auto l3_header = dp->Get<Ivp4Header>(); 
-
   // XXX: Copy IOBuf into a new mbuf
   auto buf_len = buf->ComputeChainDataLength();
   mbuf = rte_pktmbuf_alloc(eth_dev_.mbuf_pool_);
+  mbuf->ol_flags = 0; 
   mbuf->data_len = buf_len;
   mbuf->pkt_len = buf_len;
   auto mbuf_data = rte_pktmbuf_mtod(mbuf, uint8_t *);
@@ -194,11 +204,32 @@ void ebbrt::DpdkNetRep::Send(std::unique_ptr<IOBuf> buf, PacketInfo pinfo){
         ebbrt::kabort("Unknown checksum type");
     }
     mbuf->ol_flags |= PKT_TX_IPV4;
-    mbuf->l2_len = sizeof(EthernetHeader);
-    mbuf->l3_len = sizeof(Ipv4Header);
+    mbuf->l2_len = sizeof(struct ether_hdr);
+    mbuf->l3_len = sizeof(struct ipv4_hdr);
+    std::cout << "Blah" << std::endl;
   }else{
     mbuf->ol_flags |= PKT_TX_L4_NO_CKSUM;
   }
+
+
+#if 0
+  /* Verify Checksum */
+  auto ip_hdr =  (struct ipv4_hdr*)(rte_pktmbuf_mtod(mbuf, uint8_t*) + mbuf->l2_len); 
+  auto udp_hdr =(struct udp_hdr*)(rte_pktmbuf_mtod(mbuf, uint8_t*) + mbuf->l2_len + mbuf->l3_len);
+  //std::cout << "OFFSET: Our= " << pinfo.csum_start + pinfo.csum_offset  << std::endl;
+  //std::cout << "OFFSET: Thier= " << mbuf->l2_len + mbuf->l3_len  << std::endl;
+  std::cout << "ORIGINAL PCKSUM " << udp_hdr->dgram_cksum << std::endl;
+  auto save1 = udp_hdr->dgram_cksum;
+  auto save2 = ip_hdr->hdr_checksum;
+  ip_hdr->hdr_checksum = 0;
+  udp_hdr->dgram_cksum = 0;
+  std::cout << "IPV4 PCKSUM: "<<  rte_ipv4_phdr_cksum(ip_hdr,0) << std::endl;
+  //std::cout << "UDP CKSUM: "<<  rte_ipv4_udptcp_cksum(ip_hdr,udp_hdr) << std::endl;
+  ip_hdr->hdr_checksum = save2;
+  udp_hdr->dgram_cksum = save1;
+  
+      ebbrt::kabort("BYE ");
+#endif
 
   /* Send packet */
 	auto nb_tx = rte_eth_tx_burst(eth_dev_.port_, 0, &mbuf, 1);
@@ -243,20 +274,10 @@ void ebbrt::DpdkNetRep::ReceivePoll() {
       /* check for control mbufs */
       ebbrt::kbugon(rte_is_ctrlmbuf(p));
       /* Construct IOBuf containing the full mbuf */
-       auto rbuf = MakeUniqueIOBuf(0);
-       auto tmp = std::make_unique<StaticIOBuf>(
-           const_cast<const uint8_t *>(static_cast<uint8_t*>(p->buf_addr)), 
-                         static_cast<size_t>(p->buf_len));
-           //rte_pktmbuf_mtod_offset(p, const uint8_t*, 0),
-//                         static_cast<size_t>(rte_pktmbuf_pkt_len(p)));
-      rbuf->PrependChain(std::move(tmp));
-      //auto rbuf = std::unique_ptr<MutUniqueIOBuf>(new MutUniqueIOBuf(reinterpret_cast<uint8_t*>(p->buf_addr),static_cast<size_t>(rte_pktmbuf_pkt_len(p))));
-      //auto rbuf = std::unique_ptr<MutIOBufRef>(new MutIOBufRef(reinterpret_cast<uint8_t*>(p->buf_addr),static_cast<size_t>(rte_pktmbuf_pkt_len(p))));
-      /* Resize IOBuf to contain packet data */
-      rbuf->AdvanceChain(p->data_off);
-      auto len = rbuf->ComputeChainDataLength();
-      rbuf->TrimEnd(len-rte_pktmbuf_pkt_len(p));
-      ebbrt::kbugon(rbuf->ComputeChainDataLength() != rte_pktmbuf_pkt_len(p));  
+       auto rbuf = MakeUniqueIOBuf(rte_pktmbuf_data_len(p));
+       auto dp = rbuf->GetMutDataPointer();       
+       auto mbuf_data = rte_pktmbuf_mtod(p, uint8_t *);
+       memcpy(dp.Data(), mbuf_data, rte_pktmbuf_data_len(p));
       eth_dev_.itf_.Receive(std::move(rbuf));
     }
   }
