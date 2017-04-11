@@ -4,6 +4,7 @@
 //          http://www.boost.org/LICENSE_1_0.txt)
 #include "Net.h"
 
+#include <iostream>
 #include "../UniqueIOBuf.h"
 #include "NetChecksum.h"
 #include "NetUdp.h"
@@ -137,6 +138,20 @@ void ebbrt::NetworkManager::Interface::SendUdp(UdpPcb& pcb, Ipv4Address addr,
   udp_header.length = htons(data_size + sizeof(UdpHeader));
   udp_header.checksum = 0;
 
+#if 1 // calculate checksum 
+  // Append data and checksum the whole packet
+  header_buf->AppendChain(std::move(buf));
+
+  auto csum = IpPseudoCsum(*header_buf, kIpProtoUDP, src_addr, addr);
+
+  if (unlikely(csum == 0x0000))
+    csum = 0xffff;
+  udp_header.checksum = csum;
+  kassert(IpPseudoCsum(*header_buf, kIpProtoUDP, src_addr, addr) == 0);
+
+  SendIp(std::move(header_buf), src_addr, addr, kIpProtoUDP);
+}
+#else
   // Append data
   header_buf->AppendChain(std::move(buf));
 
@@ -158,3 +173,4 @@ void ebbrt::NetworkManager::Interface::SendUdp(UdpPcb& pcb, Ipv4Address addr,
   }
   SendIp(std::move(header_buf), src_addr, addr, kIpProtoUDP, std::move(pinfo));
 }
+#endif
