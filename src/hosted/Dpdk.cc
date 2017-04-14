@@ -273,11 +273,16 @@ void ebbrt::DpdkNetRep::ReceivePoll() {
       ebbrt::kbugon((rte_pktmbuf_pkt_len(p) != rte_pktmbuf_data_len(p)));
       /* check for control mbufs */
       ebbrt::kbugon(rte_is_ctrlmbuf(p));
-      /* Construct IOBuf containing the full mbuf */
-       auto rbuf = MakeUniqueIOBuf(rte_pktmbuf_data_len(p));
-       auto dp = rbuf->GetMutDataPointer();       
-       auto mbuf_data = rte_pktmbuf_mtod(p, uint8_t *);
-       memcpy(dp.Data(), mbuf_data, rte_pktmbuf_data_len(p));
+
+
+      ///* Construct IOBuf containing the full mbuf */
+      // auto rbuf = MakeUniqueIOBuf(rte_pktmbuf_data_len(p));
+      // auto dp = rbuf->GetMutDataPointer();       
+      // auto mbuf_data = rte_pktmbuf_mtod(p, uint8_t *);
+      // memcpy(dp.Data(), mbuf_data, rte_pktmbuf_data_len(p));
+      std::unique_ptr<DpdkIOBuf> rbuf = DpdkIOBuf::Create<DpdkIOBuf>(p);
+
+      
       eth_dev_.itf_.Receive(std::move(rbuf));
     }
   }
