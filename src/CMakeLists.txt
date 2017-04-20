@@ -50,6 +50,7 @@ install(FILES ${CAPNP_GENERATED_HEADERS} DESTINATION include/ebbrt)
 
 if( __EBBRT_HOSTED_DPDK_DRIVER__ )
   install(FILES ${EBBRT_DPDK_HEADERS} DESTINATION include/ebbrt/native)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mssse3")
 endif()
 
 # Only create cmake package for hosted runtime

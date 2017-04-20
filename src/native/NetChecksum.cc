@@ -139,7 +139,12 @@ uint32_t IpCsumNoFold(const ebbrt::IOBuf& buf) {
 uint32_t PseudoCsum(uint16_t len, uint8_t proto, ebbrt::Ipv4Address src,
                     ebbrt::Ipv4Address dst) {
   uint32_t sum = 0;
+#ifndef __EBBRT_HOSTED_DPDK_DRIVER__
+  // XXX: kludge
   uint32_t lenproto = (ebbrt::ntohs(len) << 16) + (proto << 8);
+#else
+  uint32_t lenproto = (ntohs(len) << 16) + (proto << 8);
+#endif
   asm("addl %[dst], %[sum];"
       "adcl %[src], %[sum];"
       "adcl %[lenproto], %[sum];"

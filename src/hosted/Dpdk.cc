@@ -7,9 +7,12 @@
 #include <cstdio>
 #include <iostream>
 #include "Dpdk.h"
+#include "../Timer.h"
+#include "../MulticoreEbb.h"
 #include "../UniqueIOBuf.h"
 #include "../StaticIOBuf.h"
 #include "../IOBufRef.h"
+#include "../Debug.h"
 
 #include <rte_ip.h>
 #include <rte_ip.h>
@@ -17,6 +20,7 @@
 #include <rte_ethdev.h>
 
 unsigned int portmask;
+
 
 /*
  * Initilizae a given port using global settings
@@ -211,8 +215,8 @@ void ebbrt::DpdkNetRep::Send(std::unique_ptr<IOBuf> buf, PacketInfo pinfo){
     mbuf->ol_flags |= PKT_TX_L4_NO_CKSUM;
   }
 
-
 #if 0
+  // TODO: UDP/TCP Checksum Offloading
   /* Verify Checksum */
   auto ip_hdr =  (struct ipv4_hdr*)(rte_pktmbuf_mtod(mbuf, uint8_t*) + mbuf->l2_len); 
   auto udp_hdr =(struct udp_hdr*)(rte_pktmbuf_mtod(mbuf, uint8_t*) + mbuf->l2_len + mbuf->l3_len);
@@ -251,7 +255,6 @@ void ebbrt::DpdkNetRep::Fire(){
 	ReceivePoll();
 }
 
-
 void ebbrt::DpdkNetRep::ReceivePoll() {
 	/* Get burst of RX packets from the assigned port */
 	struct rte_mbuf *bufs[BURST_SIZE];
@@ -288,5 +291,21 @@ void ebbrt::DpdkNetRep::ReceivePoll() {
   }
   return;
 }
+
+/*
+ * DpdkIOBufOwner
+ */
+ebbrt::DpdkIOBufOwner::DpdkIOBufOwner(struct rte_mbuf* mbuf) : mbuf_((const struct rte_mbuf*)mbuf) {
+  if(!rte_pktmbuf_is_contiguous(mbuf)) {
+    ebbrt::kabort("// TODO: segmented mbuf support"); 
+  }
+  buffer_ = rte_pktmbuf_mtod(mbuf, const uint8_t*);
+  capacity_ = static_cast<size_t>(rte_pktmbuf_data_len(mbuf_));
+} 
+
+ebbrt::DpdkIOBufOwner::~DpdkIOBufOwner(){
+  rte_pktmbuf_free(const_cast<struct rte_mbuf*>(mbuf_)); 
+}
+
 
 #endif  // __EBBRT_HOSTED_DPDK_DRIVER__

@@ -8,7 +8,6 @@
 
 #include "../MulticoreEbb.h"
 #include "../native/Net.h"
-#include "../Debug.h"
 #include "../Timer.h"
 
 #include <rte_config.h>
@@ -51,19 +50,10 @@ namespace Dpdk {
 class DpdkIOBufOwner {
   public:
     // Construct IOBuf from an existing DPDK rte_mbuf;
-    DpdkIOBufOwner(struct rte_mbuf* mbuf) : mbuf_{(const struct rte_mbuf*)mbuf} {
-      if(!rte_pktmbuf_is_contiguous(mbuf)) {
-        ebbrt::kabort("// TODO: segmented mbufs"); 
-      }
-      buffer_ = rte_pktmbuf_mtod(mbuf, const uint8_t*);
-      capacity_ = static_cast<size_t>(rte_pktmbuf_data_len(mbuf_));
-    } 
-    // It maybe possible to make this copyable using the mbuf reference counter 
+    DpdkIOBufOwner(struct rte_mbuf* mbuf);     
     DpdkIOBufOwner(DpdkIOBufOwner&&) = delete;
     DpdkIOBufOwner& operator=(DpdkIOBufOwner&&) = delete;
-    ~DpdkIOBufOwner(){ 
-        rte_pktmbuf_free(const_cast<struct rte_mbuf*>(mbuf_)); 
-    }
+    ~DpdkIOBufOwner();
     const uint8_t* Buffer() const { return buffer_; }
     size_t Capacity() const { return capacity_; }
   private:
