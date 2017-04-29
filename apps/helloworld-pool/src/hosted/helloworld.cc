@@ -15,7 +15,7 @@
 #include "Printer.h"
 
 static char* ExecName = 0;
-static unsigned int NumNodes = 2;
+static unsigned int NumNodes = 1;
 
 void AppMain() {
   auto bindir = boost::filesystem::system_complete(ExecName).parent_path() /

@@ -34,6 +34,7 @@ std::string ebbrt::NodeAllocator::CustomNetworkNodeArguments;
 
 std::string ebbrt::NodeAllocator::RunCmd(std::string cmd) {
   std::string out;
+  std::cout << "running cmd: " << cmd << std::endl;
   char line[kLineSize];
   if (cmd.empty()) {
     return std::string();
@@ -246,6 +247,25 @@ ebbrt::NodeAllocator::AllocateNode(std::string binary_path, int cpus,
                                    int numaNodes, int ram,
                                    std::string arguments,
                                    std::string constraint_node) {
+
+
+
+  std::cout << "Allocating a node!..." << std::endl;
+  std::stringstream alloc_cmd;
+  auto allocation_id =
+      node_allocator->allocation_index_.fetch_add(1, std::memory_order_relaxed);
+  auto rfut = promise_map_[allocation_id].GetFuture();
+  alloc_cmd << "/root/spawn_remote.sh " << binary_path << " " << constraint_node << " " << std::to_string(net_addr_) << " " << std::to_string(port_);
+
+  RunCmd(alloc_cmd.str());
+  return NodeDescriptor("null", std::move(rfut));
+  }
+#if 0
+ebbrt::NodeAllocator::NodeDescriptor
+ebbrt::NodeAllocator::AllocateNode(std::string binary_path, int cpus,
+                                   int numaNodes, int ram,
+                                   std::string arguments,
+                                   std::string constraint_node) {
   
   if (cpus == 0)
     cpus = DefaultCpus;
@@ -341,6 +361,8 @@ ebbrt::NodeAllocator::AllocateNode(std::string binary_path, int cpus,
 #endif
   return NodeDescriptor(id, std::move(rfut));
 }
+#endif
+
 ebbrt::NodeAllocator::~NodeAllocator() {
   nodes_.clear();
   if (CustomNetworkRemove.empty()) {
