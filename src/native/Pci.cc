@@ -6,6 +6,7 @@
 
 #include <cinttypes>
 
+#include "Acpi.h"
 #include "../Align.h"
 #include "../ExplicitlyConstructed.h"
 #include "Debug.h"
@@ -56,8 +57,7 @@ void PciWrite32(uint8_t bus, uint8_t device, uint8_t func, uint8_t offset,
 
 ebbrt::ExplicitlyConstructed<std::vector<ebbrt::pci::Device>> devices;
 ebbrt::ExplicitlyConstructed<
-    std::vector<std::function<bool(ebbrt::pci::Device&)>>>
-    driver_probes;
+    std::vector<std::function<bool(ebbrt::pci::Device&)>>> driver_probes;
 
 void EnumerateBus(uint8_t bus) {
   for (auto device = 0; device < 32; ++device) {
@@ -72,26 +72,13 @@ void EnumerateBus(uint8_t bus) {
         continue;
 
       if (dev.IsBridge()) {
-        ebbrt::kabort("Secondary bus unsupported!\n");
+        ebbrt::kprintf("bridge %d\n", dev.GetSecondaryBusNum());
+        EnumerateBus(dev.GetSecondaryBusNum());
       } else {
+        dev.DumpAddress();
+        dev.DumpInfo();
         devices->emplace_back(bus, device, func);
       }
-    }
-  }
-}
-
-void EnumerateAllBuses() {
-  auto bus = ebbrt::pci::Function(0, 0, 0);
-  if (!bus.IsMultifunc()) {
-    // single bus
-    EnumerateBus(0);
-  } else {
-    // potentially multiple buses
-    for (auto func = 0; func < 8; ++func) {
-      bus = ebbrt::pci::Function(0, 0, func);
-      if (!bus)
-        continue;
-      EnumerateBus(func);
     }
   }
 }
@@ -100,7 +87,10 @@ void EnumerateAllBuses() {
 void ebbrt::pci::Init() {
   devices.construct();
   driver_probes.construct();
-  EnumerateAllBuses();
+  auto buses = acpi::PciRootScan();
+  for (const auto& bus : buses) {
+    EnumerateBus(bus);
+  }
 }
 
 void ebbrt::pci::RegisterProbe(std::function<bool(pci::Device&)> probe) {
@@ -153,6 +143,10 @@ uint8_t ebbrt::pci::Function::GetHeaderType() const {
   return Read8(kHeaderTypeAddr) & ~kHeaderMultifuncMask;
 }
 
+uint8_t ebbrt::pci::Function::GetSecondaryBusNum() const {
+  return Read8(kSecondaryBusAddr);
+}
+
 ebbrt::pci::Function::operator bool() const { return GetVendorId() == 0xffff; }
 
 bool ebbrt::pci::Function::IsMultifunc() const {
@@ -185,6 +179,11 @@ void ebbrt::pci::Function::DisableInt() {
 
 void ebbrt::pci::Function::DumpAddress() const {
   kprintf("%u:%u:%u\n", bus_, device_, func_);
+}
+
+void ebbrt::pci::Function::DumpInfo() const {
+  kprintf("Vendor ID: 0x%x  ", GetVendorId());
+  kprintf("Device ID: 0x%x\n", GetDeviceId());
 }
 
 ebbrt::pci::Bar::Bar(pci::Device& dev, uint32_t bar_val, uint8_t idx)

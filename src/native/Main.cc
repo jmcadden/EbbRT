@@ -148,6 +148,7 @@ ebbrt::Main(multiboot::Information* mbi) {
         event_manager->ReceiveToken();
 #ifdef __EBBRT_ENABLE_NETWORKING__
         NetworkManager::Init();
+        acpi::Init();
         pci::Init();
         pci::RegisterProbe(VirtioNetDriver::Probe);
         pci::LoadDrivers();

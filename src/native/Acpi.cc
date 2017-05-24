@@ -5,6 +5,7 @@
 #include "Acpi.h"
 
 #include <cinttypes>
+#include <cstdlib>
 #include <mutex>
 
 #include "Clock.h"
@@ -13,6 +14,8 @@
 #include "E820.h"
 #include "Io.h"
 #include "Numa.h"
+#include "Pci.h"
+#include "../SpinLock.h"
 #include "VMem.h"
 
 extern "C" {
@@ -23,7 +26,7 @@ namespace {
 const constexpr size_t ACPI_MAX_INIT_TABLES = 32;
 ACPI_TABLE_DESC initial_table_storage[ACPI_MAX_INIT_TABLES];
 
-bool initialized = false;
+bool early_init = true;
 
 void ParseMadt(const ACPI_TABLE_MADT* madt) {
   auto len = madt->Header.Length;
@@ -233,6 +236,93 @@ void ebbrt::acpi::BootInit() {
   } else {
     ParseSrat(reinterpret_cast<ACPI_TABLE_SRAT*>(srat));
   }
+  early_init = false;
+}
+
+void ebbrt::acpi::Init() {
+  auto status = AcpiInitializeSubsystem();
+  if (ACPI_FAILURE(status)) {
+    ebbrt::kabort("AcpiInitializeSubsystem Failed: %d\n", status);
+  }
+
+  status = AcpiReallocateRootTable();
+  if (ACPI_FAILURE(status)) {
+    ebbrt::kabort("AcpiReallocateRootTable Failed: %d\n", status);
+  }
+
+  status = AcpiLoadTables();
+  if (ACPI_FAILURE(status)) {
+    ebbrt::kabort("AcpiLoadTables Failed: %d\n", status);
+  }
+
+  status = AcpiEnableSubsystem(ACPI_FULL_INITIALIZATION);
+  if (ACPI_FAILURE(status)) {
+    ebbrt::kabort("AcpiEnableSubsystem Failed: %d\n", status);
+  }
+
+  status = AcpiInitializeObjects(ACPI_FULL_INITIALIZATION);
+  if (ACPI_FAILURE(status)) {
+    ebbrt::kabort("AcpiInitializeObjects Failed: %d\n", status);
+  }
+}
+
+namespace {
+ACPI_STATUS WalkCallback(ACPI_HANDLE handle, uint32_t level, void* context,
+                         void** ret) {
+  auto vec = static_cast<std::vector<uint8_t>*>(context);
+  ACPI_DEVICE_INFO* info;
+  auto status = AcpiGetObjectInfo(handle, &info);
+  if (ACPI_FAILURE(status)) {
+    ebbrt::kabort("AcpiGetName Failed: %d\n", status);
+  }
+  if (info->Flags & ACPI_PCI_ROOT_BRIDGE) {
+    ebbrt::kprintf("PCI BRIDGE DETECTED\n");
+    ebbrt::kprintf("Acpi: %.4s\n", reinterpret_cast<char*>(&info->Name));
+    if (info->Valid & ACPI_VALID_ADR) {
+      ebbrt::kprintf("Addr: %llx\n", info->Address);
+    }
+    if (info->Valid & ACPI_VALID_HID) {
+      ebbrt::kprintf("HID: %s\n", info->HardwareId.String);
+    }
+    if (info->Valid & ACPI_VALID_UID) {
+      ebbrt::kprintf("UID: %s\n", info->UniqueId.String);
+    }
+    if (info->Valid & ACPI_VALID_SUB) {
+      ebbrt::kprintf("SUB: %s\n", info->SubsystemId.String);
+    }
+
+    // ACPIspec-2-0c 6.5.5 _BBN (Base Bus Number) is the PCI bus
+    // number assigned by the BIOS
+    ACPI_BUFFER results;
+    ACPI_OBJECT obj;
+    results.Length = sizeof(obj);
+    results.Pointer = &obj;
+    char method[5] = "_BBN";
+    auto status = AcpiEvaluateObjectTyped(handle, method, nullptr, &results,
+                                          ACPI_TYPE_INTEGER);
+    if (status == AE_OK) {
+      vec->push_back(obj.Integer.Value);
+    } else if (status == AE_NOT_FOUND) {
+      // Assume bus 0 if no _BBN
+      vec->push_back(0);
+    } else {
+      ebbrt::kabort("AcpiEvaluateObjectTyped Failed: %d\n", status);
+    }
+  }
+  ACPI_FREE(info);
+  return AE_OK;
+}
+}
+
+std::vector<uint8_t> ebbrt::acpi::PciRootScan() {
+  void* ret;
+  std::vector<uint8_t> vec;
+  auto status =
+      AcpiGetDevices(nullptr, WalkCallback, static_cast<void*>(&vec), &ret);
+  if (ACPI_FAILURE(status)) {
+    ebbrt::kabort("AcpiGetDevices Failed: %d\n", status);
+  }
+  return vec;
 }
 
 ACPI_STATUS AcpiOsInitialize() { return AE_OK; }
@@ -279,56 +369,91 @@ ACPI_STATUS AcpiOsCreateLock(ACPI_SPINLOCK* OutHandle) {
 void AcpiOsDeleteLock(ACPI_SPINLOCK Handle) { EBBRT_UNIMPLEMENTED(); }
 
 ACPI_CPU_FLAGS AcpiOsAcquireLock(ACPI_SPINLOCK Handle) {
-  // auto mut = static_cast<std::mutex *>(Handle);
-  // mut->lock();
+  auto mut = static_cast<std::mutex*>(Handle);
+  mut->lock();
   return AE_OK;
 }
 
 void AcpiOsReleaseLock(ACPI_SPINLOCK Handle, ACPI_CPU_FLAGS Flags) {
-  // auto mut = static_cast<std::mutex *>(Handle);
-  // mut->unlock();
+  auto mut = static_cast<std::mutex*>(Handle);
+  mut->unlock();
 }
 
-ACPI_STATUS AcpiOsCreateSemaphore(UINT32 MaxUnits, UINT32 InitialUnits,
-                                  ACPI_SEMAPHORE* OutHandle) {
-  EBBRT_UNIMPLEMENTED();
+class Semaphore {
+ public:
+  Semaphore(uint32_t max, uint32_t initial) : count_(initial), max_(max) {}
+
+  ACPI_STATUS Wait(uint32_t units, uint16_t timeout) {
+    auto time = ebbrt::clock::Wall::Now();
+    do {
+      std::lock_guard<ebbrt::SpinLock> guard(lock_);
+      if (count_ >= units) {
+        count_ -= units;
+        return AE_OK;
+      }
+    } while (timeout == 0xFFFF || ((ebbrt::clock::Wall::Now() - time) >=
+                                   std::chrono::milliseconds(timeout)));
+    return AE_TIME;
+  }
+
+  ACPI_STATUS Signal(uint32_t units) {
+    std::lock_guard<ebbrt::SpinLock> guard(lock_);
+    if (count_ == max_) {
+      return AE_LIMIT;
+    }
+
+    count_ = std::min(max_, count_ + units);
+    return AE_OK;
+  }
+
+ private:
+  ebbrt::SpinLock lock_;
+  uint32_t count_;
+  uint32_t max_;
+};
+
+ACPI_STATUS
+AcpiOsCreateSemaphore(UINT32 MaxUnits, UINT32 InitialUnits,
+                      ACPI_SEMAPHORE* OutHandle) {
+  *OutHandle = new Semaphore(MaxUnits, InitialUnits);
   return AE_OK;
 }
 
 ACPI_STATUS AcpiOsDeleteSemaphore(ACPI_SEMAPHORE Handle) {
-  EBBRT_UNIMPLEMENTED();
+  delete static_cast<Semaphore*>(Handle);
   return AE_OK;
 }
 
 ACPI_STATUS AcpiOsWaitSemaphore(ACPI_SEMAPHORE Handle, UINT32 Units,
                                 UINT16 Timeout) {
-  EBBRT_UNIMPLEMENTED();
+  auto semaphore = static_cast<Semaphore*>(Handle);
+  return semaphore->Wait(Units, Timeout);
 }
 
 ACPI_STATUS AcpiOsSignalSemaphore(ACPI_SEMAPHORE Handle, UINT32 Units) {
-  EBBRT_UNIMPLEMENTED();
-  return AE_OK;
+  auto semaphore = static_cast<Semaphore*>(Handle);
+  return semaphore->Signal(Units);
 }
 
-void* AcpiOsAllocate(ACPI_SIZE Size) {
-  EBBRT_UNIMPLEMENTED();
-  return nullptr;
-}
+void* AcpiOsAllocate(ACPI_SIZE Size) { return malloc(Size); }
 
-void AcpiOsFree(void* Memory) { EBBRT_UNIMPLEMENTED(); }
+void AcpiOsFree(void* Memory) { return free(Memory); }
 
 void* AcpiOsMapMemory(ACPI_PHYSICAL_ADDRESS Where, ACPI_SIZE Length) {
-  if (!initialized) {
+  if (early_init) {
     ebbrt::vmem::EarlyMapMemory(Where, Length);
     return reinterpret_cast<void*>(Where);
   } else {
-    EBBRT_UNIMPLEMENTED();
-    return nullptr;
+    auto end = ebbrt::Pfn::Up(Where + Length);
+    for (auto pfn = ebbrt::Pfn::Down(Where); pfn <= end; pfn += 1) {
+      ebbrt::vmem::MapMemory(pfn, pfn);
+    }
+    return reinterpret_cast<void*>(Where);
   }
 }
 
 void AcpiOsUnmapMemory(void* LogicalAddress, ACPI_SIZE Size) {
-  if (!initialized) {
+  if (early_init) {
     ebbrt::vmem::EarlyUnmapMemory(reinterpret_cast<uint64_t>(LogicalAddress),
                                   Size);
   } else {
@@ -342,10 +467,21 @@ ACPI_STATUS AcpiOsGetPhysicalAddress(void* LogicalAddress,
   return AE_OK;
 }
 
+namespace {
+ACPI_OSD_HANDLER interrupt_handler;
+void* interrupt_context;
+}
+
 ACPI_STATUS AcpiOsInstallInterruptHandler(UINT32 InterruptNumber,
                                           ACPI_OSD_HANDLER ServiceRoutine,
                                           void* Context) {
-  EBBRT_UNIMPLEMENTED();
+  // TODO: We're supposed to handle IRQ InterruptNumber (typically 9) and have
+  // that invoke ServiceRoutine. Right now we have no IOAPIC or legacy PIC setup
+  // so we don't do this.
+  ebbrt::kprintf("AcpiOsInstallInterruptHandler: InterruptNumber(%d)\n",
+                 InterruptNumber);
+  interrupt_handler = ServiceRoutine;
+  interrupt_context = Context;
   return AE_OK;
 }
 
@@ -356,8 +492,8 @@ ACPI_STATUS AcpiOsRemoveInterruptHandler(UINT32 InterruptNumber,
 }
 
 ACPI_THREAD_ID AcpiOsGetThreadId(void) {
-  EBBRT_UNIMPLEMENTED();
-  return AE_OK;
+  // 0 is not allowed, so we just add one
+  return static_cast<size_t>(ebbrt::Cpu::GetMine()) + 1;
 }
 
 ACPI_STATUS AcpiOsExecute(ACPI_EXECUTE_TYPE Type,
@@ -428,7 +564,22 @@ ACPI_STATUS AcpiOsWriteMemory(ACPI_PHYSICAL_ADDRESS Address, UINT64 Value,
 
 ACPI_STATUS AcpiOsReadPciConfiguration(ACPI_PCI_ID* PciId, UINT32 Reg,
                                        UINT64* Value, UINT32 Width) {
-  EBBRT_UNIMPLEMENTED();
+  auto function =
+      ebbrt::pci::Function(PciId->Bus, PciId->Device, PciId->Function);
+  switch (Width) {
+  case 8:
+    *Value = function.Read8(Reg);
+    break;
+  case 16:
+    *Value = function.Read16(Reg);
+    break;
+  case 32:
+    *Value = function.Read32(Reg);
+    break;
+  default:
+    EBBRT_UNIMPLEMENTED();
+    break;
+  }
   return AE_OK;
 }
 
@@ -515,11 +666,23 @@ constexpr uint32_t GL_BIT_PENDING = 1;
 constexpr uint32_t GL_BIT_OWNED = 2;
 constexpr uint32_t GL_BIT_MASK = (GL_BIT_PENDING | GL_BIT_OWNED);
 int AcpiOsAcquireGlobalLock(uint32_t* lock) {
-  EBBRT_UNIMPLEMENTED();
-  return 0;
+  auto l = reinterpret_cast<std::atomic<uint32_t>*>(lock);
+  uint32_t old, new_val;
+  do {
+    old = l->load(std::memory_order_acquire);
+    // Set BIT_OWNED and set BIT_PENDING if BIT_OWNED was already set
+    new_val =
+        ((old & ~GL_BIT_MASK) | GL_BIT_OWNED) | ((old >> 1) & GL_BIT_PENDING);
+  } while (!l->compare_exchange_weak(old, new_val, std::memory_order_acq_rel));
+  return (new_val < GL_BIT_MASK) ? GL_ACQUIRED : GL_BUSY;
 }
 
 int AcpiOsReleaseGlobalLock(uint32_t* lock) {
-  EBBRT_UNIMPLEMENTED();
-  return 0;
+  auto l = reinterpret_cast<std::atomic<uint32_t>*>(lock);
+  uint32_t old, new_val;
+  do {
+    old = l->load(std::memory_order_acquire);
+    new_val = old & ~GL_BIT_MASK;
+  } while (!l->compare_exchange_weak(old, new_val, std::memory_order_acq_rel));
+  return old & GL_BIT_PENDING;
 }

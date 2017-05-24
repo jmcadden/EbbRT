@@ -5,10 +5,15 @@
 #ifndef BAREMETAL_SRC_INCLUDE_EBBRT_ACPI_H_
 #define BAREMETAL_SRC_INCLUDE_EBBRT_ACPI_H_
 
+#include <cstdint>
+#include <vector>
+
 namespace ebbrt {
 namespace acpi {
 void BootInit();
+void Init();
 void PowerOff();
+std::vector<uint8_t> PciRootScan();
 }
 }
 

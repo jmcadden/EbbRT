@@ -30,6 +30,7 @@ class Function {
   uint8_t GetLatencyTimer() const;
   uint8_t GetHeaderType() const;
   uint8_t GetBist() const;
+  uint8_t GetSecondaryBusNum() const;
 
   operator bool() const;
   bool IsMultifunc() const;
@@ -40,8 +41,16 @@ class Function {
   void DisableInt();
 
   void DumpAddress() const;
+  void DumpInfo() const;
 
- protected:
+  uint8_t Read8(uint8_t offset) const;
+  uint16_t Read16(uint8_t offset) const;
+  uint32_t Read32(uint8_t offset) const;
+  void Write8(uint8_t offset, uint8_t val);
+  void Write16(uint8_t offset, uint16_t val);
+  void Write32(uint8_t offset, uint32_t val);
+
+protected:
   static const constexpr uint8_t kVendorIdAddr = 0x00;
   static const constexpr uint8_t kDeviceIdAddr = 0x02;
   static const constexpr uint8_t kCommandAddr = 0x04;
@@ -54,19 +63,13 @@ class Function {
   static const constexpr uint8_t kLatencyTimerAddr = 0x0D;
   static const constexpr uint8_t kHeaderTypeAddr = 0x0E;
   static const constexpr uint8_t kBistAddr = 0x0F;
+  static const constexpr uint8_t kSecondaryBusAddr = 0x19;
 
   static const constexpr uint16_t kCommandBusMaster = 1 << 2;
   static const constexpr uint16_t kCommandIntDisable = 1 << 10;
 
   static const constexpr uint8_t kHeaderMultifuncMask = 0x80;
   static const constexpr uint8_t kHeaderTypeBridge = 0x01;
-
-  uint8_t Read8(uint8_t offset) const;
-  uint16_t Read16(uint8_t offset) const;
-  uint32_t Read32(uint8_t offset) const;
-  void Write8(uint8_t offset, uint8_t val);
-  void Write16(uint8_t offset, uint16_t val);
-  void Write32(uint8_t offset, uint32_t val);
 
   uint8_t bus_;
   uint8_t device_;
