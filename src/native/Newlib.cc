@@ -11,6 +11,7 @@
 #include <sys/time.h>
 #include <sys/times.h>
 
+#include "Acpi.h"
 #include "Clock.h"
 #include "Debug.h"
 #include "GeneralPurposeAllocator.h"
@@ -22,7 +23,7 @@
 #include "Cpu.h"
 
 extern "C" int ebbrt_newlib_exit(int val) {
-  EBBRT_UNIMPLEMENTED();
+  ebbrt::acpi::PowerOff();
   return 0;
 }
 
@@ -56,7 +57,7 @@ extern "C" int ebbrt_newlib_isatty(int fd) {
 }
 
 extern "C" int ebbrt_newlib_close(int file) {
-  EBBRT_UNIMPLEMENTED();
+  ebbrt::kprintf("Warning: Attempt to close fd %d has no effect\n", file);
   return 0;
 }
 
@@ -179,7 +180,7 @@ extern "C" void ebbrt_newlib_lock_init_recursive(_LOCK_RECURSIVE_T* lock) {
 }
 
 extern "C" void ebbrt_newlib_lock_close_recursive(_LOCK_RECURSIVE_T* lock) {
-  EBBRT_UNIMPLEMENTED();
+  return; 
 }
 
 extern "C" void ebbrt_newlib_lock_acquire(_LOCK_T* lock) {

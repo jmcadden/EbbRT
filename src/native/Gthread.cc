@@ -72,7 +72,6 @@ extern "C" int ebbrt_gthread_key_create(__gthread_key_t* key,
 
 extern "C" int ebbrt_gthread_key_delete(__gthread_key_t key) {
   // TODO(dschatz): Handle non null dtors in create!
-  EBBRT_UNIMPLEMENTED();
   return 0;
 }
 

@@ -64,7 +64,7 @@ void ebbrt::runtime::Init() {
   auto cmdline = std::string(ebbrt::multiboot::CmdLine());
   auto loc = cmdline.find("host_addr=");
   if (loc == std::string::npos) {
-    kprintf("WARNING: No host address found in command line\n");
+    kprintf("Warning: No host address found in command line\n");
     return;
   }
   auto host = cmdline.substr((loc + 10));
@@ -75,7 +75,7 @@ void ebbrt::runtime::Init() {
 
   loc = cmdline.find("host_port=");
   if (loc == std::string::npos) {
-    kprintf("WARNING: No host port found in command line\n");
+    kprintf("Warning: No host port found in command line\n");
     return;
   }
   auto port = cmdline.substr((loc + 10));
@@ -86,7 +86,7 @@ void ebbrt::runtime::Init() {
 
   loc = cmdline.find("allocid=");
   if (loc == std::string::npos) {
-    kprintf("WARNING: No allocation id found in command line\n");
+    kprintf("Warning: No allocation id found in command line\n");
     return;
   }
   auto idstr = cmdline.substr((loc + 8));
