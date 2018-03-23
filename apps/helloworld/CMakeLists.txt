@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 2.6 FATAL_ERROR)
+set(CMAKE_CXX_COMPILER "g++")
 project("helloworld-ebbrt" C CXX)
 
 set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")

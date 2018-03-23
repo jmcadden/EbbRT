@@ -18,8 +18,9 @@ static int NumNodes;
 static int ALLOCATED_NODES = 0;
 
 void AppMain() {
-  auto bindir = boost::filesystem::system_complete(ExecName).parent_path() /
-                "/bm/helloworld.elf32";
+//  auto bindir = boost::filesystem::system_complete(ExecName).parent_path() /
+//                "/bm/helloworld.elf32";
+auto bindir = "/run/scratch/ebbrt/apps/helloworld/Debug/bm/helloworld.elf32";
 
   struct timeval START_TIME;
   gettimeofday(&START_TIME, NULL);
@@ -27,7 +28,7 @@ void AppMain() {
     f.Get();
     try {
       for (int i = 0; i < NumNodes; i++) {
-        auto node_desc = ebbrt::node_allocator->AllocateNode(bindir.string());
+        auto node_desc = ebbrt::node_allocator->AllocateNode(bindir);
         node_desc.NetworkId().Then(
           [START_TIME](ebbrt::Future<ebbrt::Messenger::NetworkId> f) {
             f.Get();
